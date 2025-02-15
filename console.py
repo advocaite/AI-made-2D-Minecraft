@@ -2,7 +2,7 @@ import pygame
 from command_manager import CommandManager
 
 class Console:
-    def __init__(self, font, screen_width, screen_height, player, inventory):
+    def __init__(self, font, screen_width, screen_height, player, inventory, mobs):
         self.active = False
         self.input_text = ""
         self.font = font
@@ -11,12 +11,14 @@ class Console:
         self.manager = CommandManager()
         self.player = player
         self.inventory = inventory
+        self.mobs = mobs  # Add mobs to the constructor
         self.output_lines = []
         self.commands = {
             'setday': self.set_day,
             'setnight': self.set_night,
             'setweather': self.set_weather,
             'set3': self.set_3,
+            'spawn_entity': self.spawn_entity,  # Added spawn_entity command mapping.
         }
         self.callbacks = {
             'setday': None,
@@ -42,7 +44,7 @@ class Console:
                 if event.key == pygame.K_RETURN:
                     self.history.append(self.input_text)
                     self.history_index = len(self.history)
-                    self.manager.execute_command(self.input_text, self.player, self.inventory)
+                    self.manager.execute_command(self.input_text, self.player, self.inventory, self.mobs)  # Pass mobs to CommandManager
                     self.execute_command(self.input_text)
                     self.input_text = ""
                     self.selection_start = None
@@ -138,8 +140,17 @@ class Console:
         parts = command_line.strip().split()
         if not parts:
             return
-        cmd = parts[0].lower()
-        args = parts[1:]
+        # Combine "set weather" into "setweather" if applicable.
+        if len(parts) >= 2 and parts[0].lower() == "set" and parts[1].lower() == "weather":
+            cmd = "setweather"
+            args = parts[2:]
+        # NEW: Combine "spawn entity" into "spawn_entity" if applicable.
+        elif len(parts) >= 2 and parts[0].lower() == "spawn" and parts[1].lower() == "entity":
+            cmd = "spawn_entity"
+            args = parts[2:]
+        else:
+            cmd = parts[0].lower()
+            args = parts[1:]
         if cmd in self.commands:
             self.commands[cmd](args)
         else:
@@ -173,6 +184,11 @@ class Console:
         print("Console Command: Set3 executed")
         if self.callbacks.get('set3'):
             self.callbacks['set3']()
+
+    def spawn_entity(self, args):
+        # This command has already been executed via CommandManager.
+        self.output_lines.append("Spawn entity command executed.")
+        print("Console Command: spawn_entity executed")
 
     def draw(self, screen):
         if not self.active:

@@ -20,3 +20,15 @@ TOTAL_CYCLE = DAY_DURATION + NIGHT_DURATION
 
 MASTER_VOLUME = 100   # Master volume (0-100)
 MUSIC_VOLUME = 100    # Music volume (0-100)
+
+# New: Spawner radius for spawning entities
+SPAWNER_RADIUS = 100  # Radius in pixels within which entities will spawn
+
+# New: Maximum number of entities per chunk
+MAX_ENTITIES_PER_CHUNK = 10
+
+# New: Spawn interval in milliseconds
+SPAWN_INTERVAL = 5000  # 5 seconds
+
+# New: Cooldown time between spawns in milliseconds
+SPAWN_COOLDOWN = 5000  # 5 seconds

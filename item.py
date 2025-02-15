@@ -15,6 +15,7 @@ class Item:
         self.hunger_restore = hunger_restore  # Amount of hunger restored
         self.thirst_restore = thirst_restore  # Amount of thirst restored
         self.health_restore = health_restore  # Amount of health restored
+        self.block = None  # Reference to the block if this item is a block
 
     def get_texture(self, atlas):
         block_size = c.BLOCK_SIZE

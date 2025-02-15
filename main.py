@@ -17,6 +17,24 @@ from console import Console  # new import
 from parallax_background import ParallaxBackground  # new import for parallax backgrounds
 from mob import Mob  # new import for Mob class
 
+class World:
+    def __init__(self):
+        self.entities = []
+
+    def add_entity(self, entity):
+        self.entities.append(entity)
+        print(f"Entity added to world: {entity}")
+
+    def update(self, dt, world_info):
+        for entity in self.entities:
+            entity.update(dt, world_info)
+            print(f"[DEBUG] Updated entity: {entity}")
+
+    def draw(self, surface, cam_offset_x, cam_offset_y):
+        for entity in self.entities:
+            entity.draw(surface, cam_offset_x, cam_offset_y)
+            print(f"[DEBUG] Drew entity: {entity}")
+
 def create_light_mask(radius):
     mask = pygame.Surface((radius*2, radius*2), flags=pygame.SRCALPHA)
     for ix in range(radius*2):
@@ -91,8 +109,15 @@ def main():
     parallax = ParallaxBackground(c.SCREEN_WIDTH, c.SCREEN_HEIGHT)
     parallax.set_weather("rain")
     
+    # Create the world instance and assign it to the player
+    world = World()
+    player.world = world
+
+    # Define the mobs list before creating the Console instance
+    mobs = [Mob(200, 100)]
+
     # Create the Console instance
-    console = Console(pygame.font.SysFont(None, 24), c.SCREEN_WIDTH, c.SCREEN_HEIGHT, player, player_inventory)
+    console = Console(pygame.font.SysFont(None, 24), c.SCREEN_WIDTH, c.SCREEN_HEIGHT, player, player_inventory, mobs)
     # NEW: Connect console callbacks using the already created parallax instance.
     console.callbacks['setweather'] = parallax.set_weather
     console.callbacks['setday'] = lambda: world_time.__setitem__(0, 0)
@@ -116,8 +141,8 @@ def main():
     # NEW: Connect console setweather callback to parallax's set_weather method.
     console.callbacks['setweather'] = parallax.set_weather
 
-    # Spawn a mob at a different position
-    mobs = [Mob(200, 100)]
+    # NEW: Dictionary to track the last spawn time for each spawner block
+    last_spawn_time = {}
 
     while True:
         dt = clock.tick(60)  # milliseconds since last frame
@@ -686,6 +711,43 @@ def main():
 
         # Draw console on top of the game if active
         console.draw(screen)
+
+        # Check for player proximity to spawner blocks and spawn entities
+        for ci, chunk in world_chunks.items():
+            for y, row in enumerate(chunk):
+                for x, block_obj in enumerate(row):
+                    if block_obj == b.SPAWNER:
+                        spawner_x = ci * chunk_width * block_size + x * block_size
+                        spawner_y = y * block_size
+                        distance = math.sqrt((player.rect.x - spawner_x) ** 2 + (player.rect.y - spawner_y) ** 2)
+                        if distance < c.SPAWNER_RADIUS:
+                            current_time = pygame.time.get_ticks()
+                            if (ci, x, y) not in last_spawn_time or current_time - last_spawn_time[(ci, x, y)] > c.SPAWN_COOLDOWN:
+                                # Try to spawn mob at a random air block around the spawner
+                                found_spawn = False
+                                for attempt in range(10):
+                                    offset_x = random.randint(-c.SPAWNER_RADIUS, c.SPAWNER_RADIUS)
+                                    offset_y = random.randint(-c.SPAWNER_RADIUS, c.SPAWNER_RADIUS)
+                                    new_spawn_x = spawner_x + offset_x
+                                    new_spawn_y = spawner_y + offset_y
+                                    block_x = new_spawn_x // block_size
+                                    block_y = new_spawn_y // block_size
+                                    new_ci = block_x // chunk_width
+                                    new_local_x = block_x % chunk_width
+                                    if new_ci in world_chunks and block_y < world_height:
+                                        if world_chunks[new_ci][block_y][new_local_x] == b.AIR:
+                                            new_mob = Mob(new_spawn_x, new_spawn_y)
+                                            mobs.append(new_mob)
+                                            last_spawn_time[(ci, x, y)] = current_time
+                                            print(f"Spawned new mob at ({new_spawn_x}, {new_spawn_y})")
+                                            found_spawn = True
+                                            break
+                                if not found_spawn:
+                                    # Fallback to spawner coordinates if no valid air block was found
+                                    new_mob = Mob(spawner_x, spawner_y)
+                                    mobs.append(new_mob)
+                                    last_spawn_time[(ci, x, y)] = current_time
+                                    print(f"Spawned fallback mob at ({spawner_x}, {spawner_y})")
 
         pygame.display.flip()
         

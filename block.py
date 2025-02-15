@@ -3,7 +3,7 @@ import pygame
 import config as c
 
 class Block:
-    def __init__(self, id, name, solid, color, texture_coords, drop_item=None, animation_frames=None, frame_duration=0, tint=None):
+    def __init__(self, id, name, solid, color, texture_coords, drop_item=None, animation_frames=None, frame_duration=0, tint=None, entity_type=None):
         self.id = id
         self.name = name
         self.solid = solid
@@ -14,6 +14,7 @@ class Block:
         self.frame_duration = frame_duration  # Duration of each frame in milliseconds
         self.tint = tint  # Tint color to modify block appearance
         self.item_variant = None  # New: will hold the corresponding item
+        self.entity_type = entity_type  # New: entity type to spawn
 
     # NEW: Helper method to get the block texture with tint applied if set.
     def get_texture(self, atlas):
@@ -69,12 +70,18 @@ LEAVESGG = Block(
     tint=(85, 170, 47)  # Tint color applied to leaves
 )
 
+# Define the new Spawner block with entity type
+SPAWNER = Block(22, "Spawner", True, (255, 0, 0), (5, 5), entity_type="mob")
+
 # NEW: Automatically create item variants and assign drop_item for each block except AIR.
-for blk in (GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE, WOOD, LEAVES, LEAVESGG):
+for blk in (GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE, WOOD, LEAVES, LEAVESGG, SPAWNER):
     item_variant = Item(blk.id, blk.name, blk.texture_coords, stack_size=64, is_block=True)
     item_variant.block = blk  # reference back to the block
     blk.item_variant = item_variant
     blk.drop_item = item_variant
+
+# Ensure SPAWNER_ITEM is defined
+SPAWNER_ITEM = SPAWNER.item_variant
 
 # NEW: Mapping from integer block codes to Block objects
 BLOCK_MAP = {
@@ -90,5 +97,6 @@ BLOCK_MAP = {
     18: GOLD_ORE,
     19: WOOD,
     20: LEAVES,  # NEW: Leaves block added
-    21: LEAVESGG  # NEW: Leaves block added
+    21: LEAVESGG,  # NEW: Leaves block added
+    22: SPAWNER  # NEW: Spawner block added
 }
