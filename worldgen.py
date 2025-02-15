@@ -3,6 +3,24 @@ import random
 import block as b  # import block definitions
 from tree_generator import generate_tree
 
+def int_to_block(code):
+    """Convert an integer code to the corresponding Block object."""
+    mapping = {
+        0: b.AIR,
+        1: b.GRASS,
+        2: b.DIRT,
+        4: b.STONE,
+        8: b.UNBREAKABLE,
+        9: b.WATER,
+        10: b.LIGHT,
+        16: b.COAL_ORE,
+        17: b.IRON_ORE,
+        18: b.GOLD_ORE,
+        19: b.WOOD,
+        20: b.LEAVES  # NEW: Map code 20 to LEAVES.
+    }
+    return mapping.get(code, b.AIR)
+
 def generate_chunk(chunk_index, chunk_width, height, seed=0):
     """
     Generate a chunk with:
@@ -126,5 +144,5 @@ def generate_chunk(chunk_index, chunk_width, height, seed=0):
     # --- Convert to Block Objects ---
     for y in range(height):
         for x in range(chunk_width):
-            chunk[y][x] = b.BLOCK_MAP[chunk[y][x]]
+            chunk[y][x] = int_to_block(chunk[y][x])
     return chunk

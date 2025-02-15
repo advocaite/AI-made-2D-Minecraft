@@ -1,21 +1,37 @@
+import pygame
+import config as c
+
 class Item:
-    def __init__(self, id, name, texture_coords, stack_size=64, is_block=False, is_armor=False, consumable_type=None, hunger_restore=0, thirst_restore=0, health_restore=0, effective_against=None):
+    def __init__(self, id, name, texture_coords, stack_size=1, is_block=False, is_armor=False, tint=None, effective_against=None, consumable_type=None, hunger_restore=0, thirst_restore=0, health_restore=0):
         self.id = id
         self.name = name
-        self.texture_coords = texture_coords  # (x, y) in the texture atlas
+        self.texture_coords = texture_coords
         self.stack_size = stack_size
         self.is_block = is_block
-        self.is_armor = is_armor
-        self.consumable_type = consumable_type  # e.g., "food", "drink", "potion"
-        self.hunger_restore = hunger_restore
-        self.thirst_restore = thirst_restore
-        self.health_restore = health_restore
-        # Ensure we always have a list copy.
-        self.effective_against = list(effective_against) if effective_against is not None else []
+        self.is_armor = is_armor  # NEW: Add is_armor attribute
+        self.tint = tint  # Tint color to modify item appearance
+        self.effective_against = effective_against  # List of block names this item is effective against
+        self.consumable_type = consumable_type  # Type of consumable (e.g., "food", "drink", "potion")
+        self.hunger_restore = hunger_restore  # Amount of hunger restored
+        self.thirst_restore = thirst_restore  # Amount of thirst restored
+        self.health_restore = health_restore  # Amount of health restored
+
+    def get_texture(self, atlas):
+        block_size = c.BLOCK_SIZE
+        tx, ty = self.texture_coords
+        texture_rect = pygame.Rect(tx * block_size, ty * block_size, block_size, block_size)
+        image = atlas.subsurface(texture_rect).convert_alpha()
+        # Apply tint if set (ensuring transparency).
+        if self.tint:
+            tinted = image.copy()
+            tinted.fill(self.tint, special_flags=pygame.BLEND_RGBA_MULT)
+            image = tinted
+        return image
 
     def consume(self, character):
         # Apply consumable effects to the character.
         if self.consumable_type == "food":
+            character.hunger = min(100, character.hunger + self.hunger_restore)
             print(f"{self.name} consumed: hunger increased by {self.hunger_restore}")
         elif self.consumable_type == "drink":
             character.thirst = min(100, character.thirst + self.thirst_restore)

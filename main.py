@@ -9,12 +9,13 @@ from character import Character  # new import
 from save_manager import SaveManager
 import inventory
 import inventory_ui
-from item import Item  # new import for Item class
+from item import Item, ITEM_PICKAXE, ITEM_SWORD, ITEM_AXE, APPLE, WATER_BOTTLE  # Ensure Item and example items are imported
 from world_item import WorldItem  # new import for WorldItem class
 from crafting_ui import CraftingUI  # new import
 from action_mode_controller import ActionModeController  # new import
 from console import Console  # new import
 from parallax_background import ParallaxBackground  # new import for parallax backgrounds
+from mob import Mob  # new import for Mob class
 
 def create_light_mask(radius):
     mask = pygame.Surface((radius*2, radius*2), flags=pygame.SRCALPHA)
@@ -114,6 +115,9 @@ def main():
 
     # NEW: Connect console setweather callback to parallax's set_weather method.
     console.callbacks['setweather'] = parallax.set_weather
+
+    # Spawn a mob at a different position
+    mobs = [Mob(200, 100)]
 
     while True:
         dt = clock.tick(60)  # milliseconds since last frame
@@ -327,7 +331,7 @@ def main():
         # Update horizontal movement and animations (pass dt to update)
         if not action_mode:
             keys = pygame.key.get_pressed()
-            player.update(keys, dt)
+            player.update(keys, dt, player_inventory)
         
         # Separate collision resolution into horizontal and vertical passes:
 
@@ -489,12 +493,25 @@ def main():
             "world_chunks": world_chunks,
             "chunk_width": chunk_width,
             "block_size": block_size,
-            "world_height": world_height
+            "world_height": world_height,
+            "dropped_items": []  # Initialize dropped_items list
         }
-        # Update player; pass world_info for optimized attack collision detection.
+        # Update player; pass world_info and mobs for optimized attack collision detection.
         keys = pygame.key.get_pressed()
-        player.update(keys, dt, in_water, world_info)
+        player.update(keys, dt, in_water, world_info, mobs, player_inventory)
         
+        # Update mobs; pass world_info for collision detection.
+        for mob in mobs:
+            mob.update(dt, world_info, player_inventory)
+
+        # Handle item drops from dead mobs and add them to the player's inventory.
+        for mob in mobs:
+            if mob.await_respawn:
+                dropped_items = mob.drop_loot(world_info, player_inventory)
+                for item in dropped_items:
+                    player_inventory.add_item(item)
+                mobs.remove(mob)
+
         # Head collision detection (for upward jumps)
         if player_vy < 0:
             head_x = player.rect.x + player.rect.width // 2
@@ -595,6 +612,11 @@ def main():
         
         # Render player with updated camera offset.
         player.draw(screen, cam_offset_x, cam_offset_y)
+        
+        # Render mobs with updated camera offset.
+        for mob in mobs:
+            if mob.is_alive:
+                mob.draw(screen, cam_offset_x, cam_offset_y)
         
         # New: Render HUD for health, hunger, and thirst.
         hud_font = pygame.font.SysFont(None, 24)

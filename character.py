@@ -35,6 +35,8 @@ class Character:
         self.is_alive = True
         self.death_triggered = False
         self.await_respawn = False
+        self.console_active = False  # NEW: Track console state
+        self.paused = False  # NEW: Track paused state
 
         # Animation setup: load animations from characters/knight using 128x128 cells (added jump animation)
         base_path = os.path.join("characters", "knight")
@@ -72,7 +74,7 @@ class Character:
             self.attack_timer = 200  # hold final frame for 200ms
             self.attack_collided = False  # reset collision flag
 
-    def perform_attack_collision(self, world_info):
+    def perform_attack_collision(self, world_info, mobs):
         block_size = world_info["block_size"]
         chunk_width = world_info["chunk_width"]
         world_height = world_info["world_height"]
@@ -111,6 +113,15 @@ class Character:
         else:
             print("Attack hit: None")
 
+        # Check for collisions with mobs
+        for mob in mobs:
+            if attack_rect.colliderect(mob.rect):
+                mob.health -= 10  # Example damage value
+                print(f"Attack hit mob: {mob} - Health remaining: {mob.health}")
+                if mob.health <= 0:
+                    mob.is_alive = False
+                break
+
     def apply_gravity(self):
         self.vy += c.GRAVITY
         self.rect.y += self.vy
@@ -137,7 +148,15 @@ class Character:
             self.animation_timer = 0
             self.death_triggered = True
 
-    def update(self, keys, dt, in_water=False, world_info=None):
+    def update(self, keys, dt, in_water=False, world_info=None, mobs=None, player_inventory=None):
+        # Pause character movement if paused
+        if self.paused:
+            return
+
+        # Pause character movement if console is active
+        if self.console_active:
+            return
+
         # Update status (hunger, thirst, health) first.
         self.update_status(dt, in_water)
 
@@ -167,7 +186,7 @@ class Character:
                     else:
                         # On the last frame, perform attack collision if not already done.
                         if not self.attack_collided and world_info:
-                            self.perform_attack_collision(world_info)
+                            self.perform_attack_collision(world_info, mobs)
                             self.attack_collided = True
                         self.attack_timer -= dt * self.animation_speed
                         if self.attack_timer <= 0:
