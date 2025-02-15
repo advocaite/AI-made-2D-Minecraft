@@ -1,0 +1,41 @@
+{
+    "pickaxe": {
+        "ingredients": [
+            { "item_id": 19, "quantity": 3 },
+            { "item_id": 4, "quantity": 2 }
+        ],
+        "result": {
+            "item_id": 100,
+            "name": "Pickaxe",
+            "texture_coords": [26, 17],
+            "stack_size": 1,
+            "is_block": false
+        }
+    },
+    "sword": {
+        "ingredients": [
+            { "item_id": 19, "quantity": 2 },
+            { "item_id": 4, "quantity": 3 }
+        ],
+        "result": {
+            "item_id": 101,
+            "name": "Sword",
+            "texture_coords": [28, 17],
+            "stack_size": 1,
+            "is_block": false
+        }
+    },
+    "axe": {
+        "ingredients": [
+            { "item_id": 19, "quantity": 3 },
+            { "item_id": 4, "quantity": 2 }
+        ],
+        "result": {
+            "item_id": 102,
+            "name": "Axe",
+            "texture_coords": [24, 17],
+            "stack_size": 1,
+            "is_block": false
+        }
+    }
+}
