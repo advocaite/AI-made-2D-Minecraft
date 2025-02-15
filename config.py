@@ -46,5 +46,5 @@ ENTITY_ATTACK_DAMAGE = 5  # Damage dealt to player
 ENTITY_ATTACK_COOLDOWN = 1500  # Increased to 1.5 seconds between attacks
 ENTITY_ATTACK_RANGE = 30  # Pixels distance for attack to connect
 ENTITY_ATTACK_DURATION = 800  # Increased to 800ms for slower attack animation
-ENTITY_KNOCKBACK_FORCE = 8  # Force of knockback when hit
-ENTITY_KNOCKBACK_LIFT = 4  # Upward force of knockback
+ENTITY_KNOCKBACK_FORCE = 16  # Force of knockback when hit
+ENTITY_KNOCKBACK_LIFT = 8  # Upward force of knockback

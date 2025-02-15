@@ -16,6 +16,7 @@ from action_mode_controller import ActionModeController  # new import
 from console import Console  # new import
 from parallax_background import ParallaxBackground  # new import for parallax backgrounds
 from mob import Mob  # new import for Mob class
+from death_menu import DeathMenu  # new import
 
 class World:
     def __init__(self):
@@ -144,6 +145,8 @@ def main():
     # NEW: Dictionary to track the last spawn time for each spawner block
     last_spawn_time = {}
 
+    death_menu = None
+
     while True:
         dt = clock.tick(60)  # milliseconds since last frame
         # Reset placement flags when mouse buttons are released:
@@ -176,6 +179,20 @@ def main():
 
         # Event handling
         for event in pygame.event.get():
+            # Handle death menu events first if active
+            if death_menu and not player.is_alive:
+                action = death_menu.handle_event(event)
+                if action == "try_again":
+                    # Reset player
+                    player = Character(100, 100)
+                    player.world = world
+                    player.inventory = player_inventory
+                    death_menu = None
+                    continue
+                elif action == "main_menu":  # Changed from "quit"
+                    pygame.mixer.music.stop()  # Stop music before returning
+                    return "launcher"  # Return to launcher instead of quitting
+
             # Pass all events to the console
             console.handle_event(event)
             # If console is active, bypass further game input handling
@@ -353,6 +370,11 @@ def main():
                     slot_index = event.key - pygame.K_1
                     player_inventory.select_hotbar_slot(slot_index)
         
+        # Check for death and create menu
+        if player.death_triggered:
+            death_menu = DeathMenu(c.SCREEN_WIDTH, c.SCREEN_HEIGHT)
+            player.death_triggered = False
+
         # Update horizontal movement and animations (pass dt to update)
         if not action_mode:
             keys = pygame.key.get_pressed()
@@ -749,7 +771,14 @@ def main():
                                     last_spawn_time[(ci, x, y)] = current_time
                                     print(f"Spawned fallback mob at ({spawner_x}, {spawner_y})")
 
+        # Draw death menu last (after console)
+        if death_menu and not player.is_alive:
+            death_menu.draw(screen)
+
         pygame.display.flip()
+        
+    return "quit"
         
 if __name__ == "__main__":
     main()
+
