@@ -1,4 +1,4 @@
-# Reriara Clone
+# 2D Minecraft all code is generated with multiple AI models
 
 A 2D Minecraft clone with sandbox survival and building mechanics.
 
