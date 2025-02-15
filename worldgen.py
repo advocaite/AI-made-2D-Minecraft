@@ -1,23 +1,7 @@
 from noise import pnoise1, pnoise2
 import random
 import block as b  # import block definitions
-
-def int_to_block(code):
-    """Convert an integer code to the corresponding Block object."""
-    mapping = {
-        0: b.AIR,
-        1: b.GRASS,
-        2: b.DIRT,
-        4: b.STONE,
-        8: b.UNBREAKABLE,
-        9: b.WATER,
-        10: b.LIGHT,
-        16: b.COAL_ORE,
-        17: b.IRON_ORE,
-        18: b.GOLD_ORE,
-        19: b.WOOD
-    }
-    return mapping.get(code, b.AIR)
+from tree_generator import generate_tree
 
 def generate_chunk(chunk_index, chunk_width, height, seed=0):
     """
@@ -132,8 +116,15 @@ def generate_chunk(chunk_index, chunk_width, height, seed=0):
                     for h in range(1, tree_height + 1):
                         chunk[terrain_height - h][local_x] = 19  # wood
 
+    # NEW: Tree generation pass to add trees with leaves on top of grass blocks.
+    for local_x in range(chunk_width):
+        terrain_height = surface_heights[local_x]
+        if terrain_height is not None and chunk[terrain_height][local_x] == 1:
+            if random.random() < 0.05:  # Adjust chance as needed.
+                generate_tree(chunk, local_x, terrain_height)
+
     # --- Convert to Block Objects ---
     for y in range(height):
         for x in range(chunk_width):
-            chunk[y][x] = int_to_block(chunk[y][x])
+            chunk[y][x] = b.BLOCK_MAP[chunk[y][x]]
     return chunk

@@ -586,13 +586,8 @@ def main():
             for y, row in enumerate(chunk):
                 for x, block_obj in enumerate(row):
                     if block_obj != b.AIR:
-                        if block_obj.animation_frames:
-                            frame_index = (animation_time // block_obj.frame_duration) % len(block_obj.animation_frames)
-                            tx, ty = block_obj.animation_frames[frame_index]
-                        else:
-                            tx, ty = block_obj.texture_coords
-                        texture_rect = pygame.Rect(tx * block_size, ty * block_size, block_size, block_size)
-                        screen.blit(texture_atlas, (chunk_x_offset + x * block_size, y * block_size - cam_offset_y), texture_rect)
+                        texture = block_obj.get_texture(texture_atlas)
+                        screen.blit(texture, (chunk_x_offset + x * block_size, y * block_size - cam_offset_y))
         
         # Render world items
         for world_item in world_items:

@@ -1,7 +1,9 @@
 from item import Item  # added import
+import pygame
+import config as c
 
 class Block:
-    def __init__(self, id, name, solid, color, texture_coords, drop_item=None, animation_frames=None, frame_duration=0):
+    def __init__(self, id, name, solid, color, texture_coords, drop_item=None, animation_frames=None, frame_duration=0, tint=None):
         self.id = id
         self.name = name
         self.solid = solid
@@ -10,7 +12,26 @@ class Block:
         self.drop_item = drop_item  # Optional item drop
         self.animation_frames = animation_frames  # List of (x, y) tuples for animation frames
         self.frame_duration = frame_duration  # Duration of each frame in milliseconds
+        self.tint = tint  # Tint color to modify block appearance
         self.item_variant = None  # New: will hold the corresponding item
+
+    # NEW: Helper method to get the block texture with tint applied if set.
+    def get_texture(self, atlas):
+        # Cache the base image extracted from the atlas.
+        if not hasattr(self, "_cached_base"):
+            block_size = c.BLOCK_SIZE
+            tx, ty = self.texture_coords
+            texture_rect = pygame.Rect(tx * block_size, ty * block_size, block_size, block_size)
+            self._cached_base = atlas.subsurface(texture_rect).convert_alpha()
+        # If no tint is set, use the base texture.
+        if not self.tint:
+            return self._cached_base
+        # If tinted image not yet computed, compute and cache it.
+        if not hasattr(self, "_cached_texture"):
+            tinted = self._cached_base.copy()
+            tinted.fill(self.tint, special_flags=pygame.BLEND_RGBA_MULT)
+            self._cached_texture = tinted
+        return self._cached_texture
 
 # Define standard blocks
 AIR = Block(0, "Air", False, (255, 255, 255), (0, 0))
@@ -26,22 +47,34 @@ IRON_ORE = Block(17, "Iron Ore", True, (220, 220, 220), (0, 12))
 GOLD_ORE = Block(18, "Gold Ore", True, (255, 215, 0), (0, 10))
 WOOD = Block(19, "Wood", True, (255, 215, 0), (1, 13))
 
-# NEW: Create item variants for each block except AIR.
-for block in (GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE, WOOD):
-    # Create an Item with a high stack size (e.g., 64) and assign a reference to its block.
-    item_variant = Item(block.id, block.name, block.texture_coords, stack_size=64, is_block=True)
-    item_variant.block = block  # reference back to the block
-    block.item_variant = item_variant
+# NEW: Define animated Leaves block with tint.
+LEAVES = Block(
+    20,
+    "Leaves",
+    True,
+    (34, 139, 34),
+    (9, 12),
+    animation_frames=[(9, 12), (10, 12), (11, 12), (12, 12)],
+    frame_duration=300,
+    tint=(34, 139, 34)  # Tint color applied to leaves
+)
+LEAVESGG = Block(
+    21,
+    "Leavesgg",
+    True,
+    (85, 170, 47),
+    (9, 12),
+    animation_frames=[(9, 12), (10, 12), (11, 12), (12, 12)],
+    frame_duration=300,
+    tint=(85, 170, 47)  # Tint color applied to leaves
+)
 
-# Assign drop_item after item_variant is set.
-GRASS.drop_item = GRASS.item_variant
-DIRT.drop_item = DIRT.item_variant
-STONE.drop_item = STONE.item_variant
-COAL_ORE.drop_item = COAL_ORE.item_variant
-IRON_ORE.drop_item = IRON_ORE.item_variant
-GOLD_ORE.drop_item = GOLD_ORE.item_variant
-WOOD.drop_item = WOOD.item_variant
-WATER.drop_item = WATER.item_variant
+# NEW: Automatically create item variants and assign drop_item for each block except AIR.
+for blk in (GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE, WOOD, LEAVES, LEAVESGG):
+    item_variant = Item(blk.id, blk.name, blk.texture_coords, stack_size=64, is_block=True)
+    item_variant.block = blk  # reference back to the block
+    blk.item_variant = item_variant
+    blk.drop_item = item_variant
 
 # NEW: Mapping from integer block codes to Block objects
 BLOCK_MAP = {
@@ -55,5 +88,7 @@ BLOCK_MAP = {
     16: COAL_ORE,
     17: IRON_ORE,
     18: GOLD_ORE,
-    19: WOOD
+    19: WOOD,
+    20: LEAVES,  # NEW: Leaves block added
+    21: LEAVESGG  # NEW: Leaves block added
 }
