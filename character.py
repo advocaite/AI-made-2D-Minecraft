@@ -37,6 +37,7 @@ class Character:
         self.await_respawn = False
         self.console_active = False  # NEW: Track console state
         self.paused = False  # NEW: Track paused state
+        self.inventory = None  # Add this line to store inventory reference
 
         # Animation setup: load animations from characters/knight using 128x128 cells (added jump animation)
         base_path = os.path.join("characters", "knight")
@@ -86,7 +87,32 @@ class Character:
         else:
             attack_rect = pygame.Rect(self.rect.left - attack_range, self.rect.top, attack_range, self.rect.height)
 
-        # Determine tile bounds covered by the attack_rect.
+        # Check for collisions with mobs first
+        mobs_to_remove = []  # Track mobs that need to be removed
+        for mob in mobs:
+            if attack_rect.colliderect(mob.rect):
+                if mob.is_alive:  # Only damage living mobs
+                    mob.health -= 10  # Example damage value
+                    print(f"Attack hit mob: {mob} - Health remaining: {mob.health}")
+                    if mob.health <= 0:
+                        mob.is_alive = False
+                        mob.death_triggered = True
+                        mob.current_animation = "dead"
+                        mob.frame_index = 0
+                        mob.animation_timer = 0
+                        mobs_to_remove.append(mob)
+                break
+
+        # Remove dead mobs from the list
+        for mob in mobs_to_remove:
+            if mob in mobs:  # Check if mob is still in the list
+                if self.inventory:  # Check if inventory exists
+                    mob.drop_loot(world_info, self.inventory)  # Drop loot before removing
+                mobs.remove(mob)
+                print(f"Mob removed after death")
+
+        # Check for block collisions
+        # Calculate tile range based on attack rectangle
         tile_x_start = attack_rect.left // block_size
         tile_x_end = attack_rect.right // block_size
         tile_y_start = attack_rect.top // block_size
@@ -100,27 +126,18 @@ class Character:
                 if chunk_index in world_chunks and 0 <= tile_y < world_height:
                     block = world_chunks[chunk_index][tile_y][local_x]
                     if block.solid:
-                        # Compute block's world rectangle.
                         block_rect = pygame.Rect(chunk_index * chunk_width * block_size + local_x * block_size,
-                                                 tile_y * block_size, block_size, block_size)
+                                              tile_y * block_size, block_size, block_size)
                         if attack_rect.colliderect(block_rect):
                             hit_block = block
                             break
             if hit_block:
                 break
+
         if hit_block:
-            print(f"Attack hit block: {hit_block.name} at {block_rect}")
+            print(f"Attack hit block: {hit_block.name}")
         else:
             print("Attack hit: None")
-
-        # Check for collisions with mobs
-        for mob in mobs:
-            if attack_rect.colliderect(mob.rect):
-                mob.health -= 10  # Example damage value
-                print(f"Attack hit mob: {mob} - Health remaining: {mob.health}")
-                if mob.health <= 0:
-                    mob.is_alive = False
-                break
 
     def apply_gravity(self):
         self.vy += c.GRAVITY
@@ -149,6 +166,10 @@ class Character:
             self.death_triggered = True
 
     def update(self, keys, dt, in_water=False, world_info=None, mobs=None, player_inventory=None):
+        # Store inventory reference when it's passed
+        if player_inventory is not None:
+            self.inventory = player_inventory
+
         # Pause character movement if paused
         if self.paused:
             return

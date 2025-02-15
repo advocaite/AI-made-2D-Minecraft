@@ -32,3 +32,19 @@ SPAWN_INTERVAL = 5000  # 5 seconds
 
 # New: Cooldown time between spawns in milliseconds
 SPAWN_COOLDOWN = 5000  # 5 seconds
+
+# New: AI Configuration
+ENTITY_SIGHT_RANGE = 200  # How far entities can "see" in pixels
+ENTITY_IDLE_SPEED = 1     # Speed when wandering
+ENTITY_CHASE_SPEED = 2    # Reduced from 3 to make chase less aggressive
+ENTITY_FLEE_SPEED = 4     # Speed when fleeing
+ENTITY_WANDER_TIME = 2000 # Time to wander in one direction (ms)
+ENTITY_REST_TIME = 1000   # Time to rest between wandering (ms)
+
+# Mob combat settings
+ENTITY_ATTACK_DAMAGE = 5  # Damage dealt to player
+ENTITY_ATTACK_COOLDOWN = 1500  # Increased to 1.5 seconds between attacks
+ENTITY_ATTACK_RANGE = 30  # Pixels distance for attack to connect
+ENTITY_ATTACK_DURATION = 800  # Increased to 800ms for slower attack animation
+ENTITY_KNOCKBACK_FORCE = 8  # Force of knockback when hit
+ENTITY_KNOCKBACK_LIFT = 4  # Upward force of knockback

@@ -525,9 +525,9 @@ def main():
         keys = pygame.key.get_pressed()
         player.update(keys, dt, in_water, world_info, mobs, player_inventory)
         
-        # Update mobs; pass world_info for collision detection.
+        # Update mobs; pass world_info and player (not inventory) for collision detection.
         for mob in mobs:
-            mob.update(dt, world_info, player_inventory)
+            mob.update(dt, world_info, player)  # Changed from player_inventory to player
 
         # Handle item drops from dead mobs and add them to the player's inventory.
         for mob in mobs:

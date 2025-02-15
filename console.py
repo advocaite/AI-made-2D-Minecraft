@@ -30,7 +30,7 @@ class Console:
         self.history_index = -1
         self.selection_start = None
         self.selection_end = None
-        self.cursor_position = len(self.input_text)
+        self.cursor_position = 0  # Initialize cursor position
 
         # Initialize the scrap system
         pygame.scrap.init()
@@ -107,12 +107,16 @@ class Console:
                     # Ignore CTRL key presses to prevent deselection
                     pass
                 else:
-                    # Filter out unsupported unicode characters.
-                    char = event.unicode.encode("ascii", "ignore").decode("ascii")
-                    self.input_text = self.input_text[:self.cursor_position] + char + self.input_text[self.cursor_position:]
-                    self.cursor_position += len(char)
-                    self.selection_start = None
-                    self.selection_end = None
+                    # Filter out unsupported unicode characters and handle None case
+                    try:
+                        char = event.unicode.encode("ascii", "ignore").decode("ascii")
+                        if char:  # Only update if char is not empty
+                            self.input_text = self.input_text[:self.cursor_position] + char + self.input_text[self.cursor_position:]
+                            self.cursor_position += len(char)
+                            self.selection_start = None
+                            self.selection_end = None
+                    except (AttributeError, UnicodeEncodeError):
+                        pass  # Ignore characters that can't be encoded
         elif event.type == pygame.MOUSEBUTTONDOWN and self.active:
             if event.button == 1:  # Left mouse button
                 self.selection_start = self.get_char_index_at_pos(event.pos)

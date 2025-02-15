@@ -119,3 +119,73 @@ class Entity:
     # Placeholder for future pathfinding
     def pathfind(self, target_x, target_y):
         pass
+
+    def load_animations(self, base_path, frame_width, frame_height):
+        animation_types = ["idle", "walk", "run", "jump", "attack", "dead"]
+        for anim_type in animation_types:
+            filename = os.path.join(base_path, f"{anim_type.capitalize()}.png")
+            if os.path.exists(filename):
+                sheet = pygame.image.load(filename).convert_alpha()
+                sheet_width, sheet_height = sheet.get_size()
+                frames = []
+                for y in range(0, sheet_height, frame_height):
+                    for x in range(0, sheet_width, frame_width):
+                        frame = sheet.subsurface(pygame.Rect(x, y, frame_width, frame_height))
+                        frames.append(frame)
+                self.animations[anim_type.lower()] = frames
+            else:
+                # Create a fallback frame for missing animations
+                fallback = pygame.Surface((frame_width, frame_height))
+                fallback.fill((255, 0, 255))  # magenta for visibility
+                self.animations[anim_type.lower()] = [fallback]
+
+    def update(self, dt):
+        if self.paused:
+            return
+
+        # Update animation
+        if self.current_animation in self.animations:
+            max_frames = len(self.animations[self.current_animation])
+            self.animation_timer += dt
+            if self.animation_timer >= self.frame_duration:
+                self.animation_timer = 0
+                self.frame_index = (self.frame_index + 1) % max_frames
+        else:
+            # Fallback to idle if animation doesn't exist
+            self.current_animation = "idle"
+            self.frame_index = 0
+
+    def draw(self, surface, cam_offset_x, cam_offset_y):
+        if not self.current_animation in self.animations:
+            self.current_animation = "idle"
+        if not self.animations[self.current_animation]:
+            # Fallback if no frames available
+            return
+
+        # Ensure frame_index is within bounds
+        max_frames = len(self.animations[self.current_animation])
+        if self.frame_index >= max_frames:
+            self.frame_index = 0
+
+        frame = self.animations[self.current_animation][self.frame_index]
+        
+        # Scale the frame
+        scale = 4
+        new_width = self.rect.width * scale
+        new_height = self.rect.height * scale
+        scaled_frame = pygame.transform.scale(frame, (new_width, new_height))
+        
+        # Flip if facing left
+        if self.facing == "left":
+            scaled_frame = pygame.transform.flip(scaled_frame, True, False)
+        
+        # Draw centered on the entity's position
+        draw_x = self.rect.x - cam_offset_x - (new_width - self.rect.width) // 2
+        draw_y = self.rect.y + self.rect.height - new_height - cam_offset_y
+        surface.blit(scaled_frame, (draw_x, draw_y))
+
+    def apply_gravity(self):
+        self.vy += c.GRAVITY
+
+    def move(self, dx):
+        self.rect.x += dx
