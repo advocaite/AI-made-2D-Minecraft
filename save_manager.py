@@ -1,6 +1,10 @@
 import json
 import os
-from block import BLOCK_MAP, ENHANCER  # Add this import
+import time
+from block import (
+    BLOCK_MAP, ENHANCER,
+    StorageBlock, FurnaceBlock, EnhancerBlock  # Add direct imports for block types
+)
 from item import (  # Add item imports
     IRON_INGOT, GOLD_INGOT, IRON_HELMET, IRON_CHESTPLATE,
     IRON_LEGGINGS, IRON_BOOTS, IRON_SWORD, IRON_PICKAXE,
@@ -11,6 +15,9 @@ class SaveManager:
     def __init__(self, seed=None):
         self.seed = seed
         self.save_dir = "saves"
+        # Create a seed-specific directory
+        if self.seed is not None:
+            self.save_dir = os.path.join("saves", f"world_{self.seed}")
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
             
@@ -160,22 +167,38 @@ class SaveManager:
         return None
 
     def save_all(self, world_chunks, player, inventory):
-        # Save world data
-        world_data = {}
+        # Create seed-specific metadata
+        metadata = {
+            "seed": self.seed,
+            "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        # Prepare world data with metadata
+        world_data = {
+            "metadata": metadata,
+            "chunks": {}
+        }
+
+        # Add chunks to world data with proper block serialization
         for ci, chunk in world_chunks.items():
             chunk_data = []
             for row in chunk:
                 row_data = []
                 for block in row:
-                    if hasattr(block, 'to_dict'):  # For special blocks like Storage/Furnace
-                        row_data.append(block.to_dict())
+                    if hasattr(block, 'to_dict'):  # Special blocks like Storage/Furnace/Enhancer
+                        block_dict = block.to_dict()
+                        # Ensure block maintains its ID in serialization
+                        if not "id" in block_dict:
+                            block_dict["id"] = block.id
+                        row_data.append(block_dict)
                     else:
                         row_data.append(block.id)
                 chunk_data.append(row_data)
-            world_data[str(ci)] = chunk_data
+            world_data["chunks"][str(ci)] = chunk_data
 
-        # Save player data
+        # Save player data with the same metadata
         player_data = {
+            "metadata": metadata,
             "player": {
                 "x": player.rect.x,
                 "y": player.rect.y,
@@ -191,11 +214,16 @@ class SaveManager:
             }
         }
 
-        # Save to files
-        with open(os.path.join(self.save_dir, "world.json"), "w") as f:
+        # Save to seed-specific files
+        world_file = os.path.join(self.save_dir, "world.json")
+        player_file = os.path.join(self.save_dir, "player.json")
+        
+        with open(world_file, "w") as f:
             json.dump(world_data, f)
-        with open(os.path.join(self.save_dir, "player.json"), "w") as f:
+        with open(player_file, "w") as f:
             json.dump(player_data, f)
+        
+        print(f"Saved world with seed {self.seed} to {self.save_dir}")
 
     def _serialize_inventory(self, slots):
         """Convert inventory slots to serializable format"""
@@ -222,12 +250,20 @@ class SaveManager:
 
     def load_all(self, block_map):
         try:
-            # Load world data
+            world_file = os.path.join(self.save_dir, "world.json")
+            player_file = os.path.join(self.save_dir, "player.json")
+
             world_chunks = {}
-            if os.path.exists(os.path.join(self.save_dir, "world.json")):
-                with open(os.path.join(self.save_dir, "world.json"), "r") as f:
+            if os.path.exists(world_file):
+                with open(world_file, "r") as f:
                     world_data = json.load(f)
-                    for ci_str, chunk_data in world_data.items():
+                    # Verify seed matches
+                    saved_seed = world_data.get("metadata", {}).get("seed")
+                    if saved_seed != self.seed:
+                        print(f"Warning: Loading world with seed {saved_seed}, but current seed is {self.seed}")
+                    
+                    # Load chunks
+                    for ci_str, chunk_data in world_data.get("chunks", {}).items():
                         ci = int(ci_str)
                         chunk = []
                         for row in chunk_data:
@@ -236,8 +272,17 @@ class SaveManager:
                                 if isinstance(block_data, dict):  # Special block
                                     block_id = block_data["id"]
                                     block = block_map[block_id].create_instance()
+                                    # Enhanced debugging for special blocks
+                                    print(f"Loading special block ID {block_id}: {block_data}")
+                                    print(f"Block type: {type(block)}")  # Add type debugging
                                     block.from_dict(block_data, self.item_registry)
-                                else:  # Regular block
+                                    print(f"Block loaded: {block.name}")
+                                    # Additional debug for enhancer blocks
+                                    if isinstance(block, EnhancerBlock):
+                                        print(f"Enhancer slots after loading:")
+                                        print(f"Input: {block.input_slot}")
+                                        print(f"Ingredient: {block.ingredient_slot}")
+                                else:
                                     block = block_map[block_data]
                                 new_row.append(block)
                             chunk.append(new_row)
@@ -245,8 +290,8 @@ class SaveManager:
 
             # Load player data
             player_data = None
-            if os.path.exists(os.path.join(self.save_dir, "player.json")):
-                with open(os.path.join(self.save_dir, "player.json"), "r") as f:
+            if os.path.exists(player_file):
+                with open(player_file, "r") as f:
                     player_data = json.load(f)
                     if "inventory" in player_data:
                         # Convert serialized inventory data back to proper format

@@ -265,35 +265,65 @@ class EnhancerBlock(Block):
 
     def to_dict(self):
         """Serialize enhancer data for saving"""
-        return {
+        data = {
             'id': self.id,
             'name': self.name,
-            'input_slot': self._slot_to_dict(self.input_slot),
-            'ingredient_slot': self._slot_to_dict(self.ingredient_slot)
+            'input_slot': None,
+            'ingredient_slot': None
         }
 
-    def _slot_to_dict(self, slot):
-        if slot and slot.get('item'):
-            return {
-                'item_id': slot['item'].id,
-                'quantity': slot['quantity']
+        # Save input slot
+        if self.input_slot and self.input_slot.get('item'):
+            data['input_slot'] = {
+                'item_id': self.input_slot['item'].id,
+                'quantity': self.input_slot['quantity'],
+                'modifiers': getattr(self.input_slot['item'], 'modifiers', {}),
+                'enhanced_suffix': getattr(self.input_slot['item'], 'enhanced_suffix', '')
             }
-        return None
+
+        # Save ingredient slot
+        if self.ingredient_slot and self.ingredient_slot.get('item'):
+            data['ingredient_slot'] = {
+                'item_id': self.ingredient_slot['item'].id,
+                'quantity': self.ingredient_slot['quantity']
+            }
+
+        print(f"Saving enhancer state: {data}")
+        return data
 
     def from_dict(self, data, item_registry):
         """Deserialize enhancer data when loading"""
-        self.input_slot = self._dict_to_slot(data['input_slot'], item_registry)
-        self.ingredient_slot = self._dict_to_slot(data['ingredient_slot'], item_registry)
-
-    def _dict_to_slot(self, slot_data, item_registry):
-        if slot_data:
+        # Load input slot
+        if data.get('input_slot'):
+            slot_data = data['input_slot']
             item = item_registry.get(slot_data['item_id'])
             if item:
-                return {
+                # Create new instance to avoid shared references
+                item = type(item)(item.id, item.name, item.texture_coords)
+                
+                # Apply saved modifiers and suffix
+                if 'modifiers' in slot_data:
+                    item.modifiers = slot_data['modifiers']
+                if 'enhanced_suffix' in slot_data and slot_data['enhanced_suffix']:
+                    item.enhanced_suffix = slot_data['enhanced_suffix']
+                    item.name = f"{item.name} {item.enhanced_suffix}"
+                
+                self.input_slot = {
                     'item': item,
                     'quantity': slot_data['quantity']
                 }
-        return None
+
+        # Load ingredient slot
+        if data.get('ingredient_slot'):
+            slot_data = data['ingredient_slot']
+            item = item_registry.get(slot_data['item_id'])
+            if item:
+                self.ingredient_slot = {
+                    'item': item,
+                    'quantity': slot_data['quantity']
+                }
+
+        print(f"Loaded enhancer state: input={self.input_slot}, ingredient={self.ingredient_slot}")
 
 # Define standard blocks
 AIR = Block(0, "Air", False, (255, 255, 255), (0, 0))

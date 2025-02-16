@@ -1,6 +1,7 @@
 import pygame
 import json
 import config as c
+from block import ENHANCER  # Add this import
 from ui_tooltip import Tooltip, get_item_tooltip
 
 class EnhancerUI:
@@ -56,6 +57,7 @@ class EnhancerUI:
         self.hotbar_start_y = c.SCREEN_HEIGHT - self.slot_size - 40
 
         self.debug_log = []  # Add debug log list
+        self.enhancer_block = ENHANCER.create_instance()  # Add this line to create an instance!
 
     def log_debug(self, message):
         """Add timestamped debug message"""
@@ -537,6 +539,10 @@ class EnhancerUI:
                 if event.type == pygame.QUIT:
                     self.running = False
                 self.handle_event(event)
+
+            # Update the actual enhancer block's slots
+            self.enhancer_block.input_slot = self.item_in_slot
+            self.enhancer_block.ingredient_slot = self.ingredient_in_slot
 
             self.draw()
             pygame.display.flip()

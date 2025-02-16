@@ -299,6 +299,9 @@ def main():
                             furnace_ui.run()
                         elif isinstance(block, b.EnhancerBlock):  # Add this section
                             enhancer_ui = EnhancerUI(screen, player_inventory, texture_atlas)
+                            enhancer_ui.enhancer_block = block  # Pass the actual block instance
+                            enhancer_ui.item_in_slot = block.input_slot  # Initialize UI with block's current state
+                            enhancer_ui.ingredient_in_slot = block.ingredient_slot
                             enhancer_ui.run()
             if event.type == pygame.KEYDOWN:
                 # New: Press "n" to cycle weather for testing instead of "w"
