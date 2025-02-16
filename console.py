@@ -106,6 +106,14 @@ class Console:
                 elif event.key == pygame.K_LCTRL or event.key == pygame.K_RCTRL:
                     # Ignore CTRL key presses to prevent deselection
                     pass
+                elif event.key == pygame.K_LEFT and self.cursor_position > 0:
+                    self.cursor_position -= 1
+                elif event.key == pygame.K_RIGHT and self.cursor_position < len(self.input_text):
+                    self.cursor_position += 1
+                elif event.key == pygame.K_HOME:
+                    self.cursor_position = 0
+                elif event.key == pygame.K_END:
+                    self.cursor_position = len(self.input_text)
                 else:
                     # Filter out unsupported unicode characters and handle None case
                     try:

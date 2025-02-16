@@ -21,7 +21,13 @@ class ScrollableList:
                 self.scroll_offset = min(self.max_scroll, self.scroll_offset + self.item_height)
 
     def draw(self, surface, font, selected_index):
+        # Save previous clip and set clip to scrollable area
+        previous_clip = surface.get_clip()
+        surface.set_clip(self.rect)
+        
+        # Clear background in the scroll area
         pygame.draw.rect(surface, (30, 30, 30), self.rect)
+        
         offset_y = -self.scroll_offset
         for idx, item in enumerate(self.items):
             # Determine if item is a dict with image.
@@ -55,3 +61,9 @@ class ScrollableList:
                 surface.blit(name_surf, name_rect)
                 surface.blit(info_surf, info_rect)
             offset_y += self.item_height
+
+        # Reset clip region
+        surface.set_clip(previous_clip)
+        
+        # Optional: Draw border around scrollable area
+        pygame.draw.rect(surface, (200, 200, 200), self.rect, 2)

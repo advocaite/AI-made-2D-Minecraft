@@ -25,48 +25,38 @@ class Inventory:
     def add_item_to_hotbar(self, item_variant, quantity=1):
         self.hotbar.append({"item": item_variant, "quantity": quantity})
 
-    def add_item(self, item, amount=1):
-        """Add an item to inventory. Attempt stacking in hotbar then main."""
-        # If the item is a Pickaxe and effective_against is empty, assign default values.
-        if item.name == "Pickaxe" and not item.effective_against:
-            print("Warning: Pickaxe effective_against list is empty. Using default values.")
-            item.effective_against = ["Stone", "Dirt", "Coal Ore", "Iron Ore", "Gold Ore"]
-        # If the item is an Axe and effective_against is empty, assign default values.
-        if item.name == "Axe" and not item.effective_against:
-            print("Warning: Axe effective_against list is empty. Using default values.")
-            item.effective_against = ["Wood"]
-        # Debug: Print the effective_against info to verify the item carries it.
-        print(f"Debug: Adding item {item.name} with effective_against: {item.effective_against}")
-        # Try hotbar first
-        for i in range(len(self.hotbar)):
-            slot = self.hotbar[i]
-            if slot and slot["item"] and slot["item"].id == item.id and slot["quantity"] < item.stack_size:
-                available = item.stack_size - slot["quantity"]
-                add_here = min(available, amount)
-                slot["quantity"] += add_here
-                amount -= add_here
-                if amount == 0:
-                    return
-        # Then try main inventory
-        for i in range(len(self.main)):
-            slot = self.main[i]
-            if slot and slot["item"] and slot["item"].id == item.id and slot["quantity"] < item.stack_size:
-                available = item.stack_size - slot["quantity"]
-                add_here = min(available, amount)
-                slot["quantity"] += add_here
-                amount -= add_here
-                if amount == 0:
-                    return
-        # Place in empty slot: prioritize hotbar then main
-        for container in (self.hotbar, self.main):
-            for i in range(len(container)):
-                if container[i]["item"] is None:
-                    container[i] = {"item": item, "quantity": min(amount, item.stack_size)}
-                    amount -= container[i]["quantity"]
-                    if amount == 0:
-                        return
-        # If inventory full, extra items are dropped
-        print("Inventory full; dropped excess items.")
+    def add_item(self, item, quantity=1):
+        """Add an item to the inventory"""
+        print(f"Debug: Adding item {item.name} with quantity {quantity}")
+        
+        # First try to stack with existing items
+        for container in (self.hotbar, self.armor, self.main):
+            for slot in container:
+                if slot and slot["item"] and slot["item"].id == item.id and slot["quantity"] < item.stack_size:
+                    space = item.stack_size - slot["quantity"]
+                    add_amount = min(space, quantity)
+                    slot["quantity"] += add_amount
+                    quantity -= add_amount
+                    if quantity <= 0:
+                        return True
+
+        # If we still have items to add, find empty slots
+        if quantity > 0:
+            # Try hotbar first
+            for slot in self.hotbar:
+                if not slot["item"]:  # Check the item field of the dict
+                    slot["item"] = item
+                    slot["quantity"] = quantity
+                    return True
+
+            # Then try main inventory
+            for slot in self.main:
+                if not slot["item"]:  # Check the item field of the dict
+                    slot["item"] = item
+                    slot["quantity"] = quantity
+                    return True
+
+        return False
 
     def update_quantity(self, slot, amount):
         """Update the quantity of an item in a given slot."""

@@ -34,31 +34,59 @@ class CommandManager:
                 except ValueError:
                     key = tokens[1].upper()
                 quantity = int(tokens[2]) if len(tokens) > 2 else 1
-                from item import ITEM_PICKAXE, ITEM_SWORD, ITEM_AXE, APPLE, WATER_BOTTLE
-                from block import SPAWNER_ITEM, STORAGE  # Add STORAGE import
-                item_map = {
-                    ITEM_PICKAXE.id: ITEM_PICKAXE,
-                    ITEM_SWORD.id: ITEM_SWORD,
-                    ITEM_AXE.id: ITEM_AXE,
-                    APPLE.id: APPLE,
-                    WATER_BOTTLE.id: WATER_BOTTLE,
-                    "PICKAXE": ITEM_PICKAXE,
-                    "SWORD": ITEM_SWORD,
-                    "AXE": ITEM_AXE,
-                    "APPLE": APPLE,
-                    "WATER_BOTTLE": WATER_BOTTLE,
-                    "SPAWNER": SPAWNER_ITEM,
-                    "STORAGE": STORAGE.item_variant,  # Add storage item variant
-                    STORAGE.id: STORAGE.item_variant,  # Add numeric ID mapping too
-                }
                 print(f"[DEBUG] Spawning item. Key: {key}, Quantity: {quantity}")
+
+                # Import all needed items and blocks
+                from item import ITEM_PICKAXE, ITEM_SWORD, ITEM_AXE, APPLE, WATER_BOTTLE
+                from block import SPAWNER_ITEM, STORAGE, FURNACE
+                
+                # Create proper item dictionary structure
+                item_dict = {
+                    "item": None,
+                    "quantity": quantity
+                }
+
+                item_map = {
+                    # ...existing items...
+                    "SPAWNER": SPAWNER_ITEM,
+                    "STORAGE": STORAGE.item_variant,
+                    STORAGE.id: STORAGE.item_variant,
+                    "FURNACE": FURNACE.item_variant,
+                    FURNACE.id: FURNACE.item_variant,
+                    "IRON_HELMET": IRON_HELMET,
+                    "IRON_CHESTPLATE": IRON_CHESTPLATE,
+                    "IRON_LEGGINGS": IRON_LEGGINGS,
+                    "IRON_BOOTS": IRON_BOOTS,
+                    "IRON_SWORD": IRON_SWORD,
+                    "IRON_PICKAXE": IRON_PICKAXE,
+                    "IRON_AXE": IRON_AXE,
+                    "IRON_SHOVEL": IRON_SHOVEL,
+                    # Add item IDs as well
+                    30: IRON_HELMET,
+                    31: IRON_CHESTPLATE,
+                    32: IRON_LEGGINGS,
+                    33: IRON_BOOTS,
+                    40: IRON_SWORD,
+                    41: IRON_PICKAXE,
+                    42: IRON_AXE,
+                    43: IRON_SHOVEL,
+                }
+
                 if key in item_map:
-                    inventory.add_item(item_map[key], quantity)
-                    print(f"[INFO] Spawned {quantity} of {item_map[key].name}")
+                    # Create a copy of the item variant for blocks that need instancing
+                    if key in ["FURNACE", FURNACE.id, "STORAGE", STORAGE.id]:
+                        block = item_map[key].block.create_instance()
+                        item = block.item_variant
+                    else:
+                        item = item_map[key]
+                    
+                    inventory.add_item(item, quantity)
+                    print(f"[INFO] Spawned {quantity} of {item.name}")
                 else:
                     print("[WARN] Item id/name not recognized.")
+                    
             except Exception as e:
-                print("[ERROR] Spawn item command failed. Exception:", e)
+                print("[ERROR] Spawn item command failed. Exception:", str(e))
                 print("Usage: spawn_item <item_id|item_name> <quantity>")
         elif cmd == "setweather":
             # Let Console handle this command.

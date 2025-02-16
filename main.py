@@ -18,6 +18,7 @@ from parallax_background import ParallaxBackground  # new import for parallax ba
 from mob import Mob  # new import for Mob class
 from death_menu import DeathMenu  # new import
 from storage_ui import StorageUI  # new import
+from furnace_ui import FurnaceUI  # new import
 
 class World:
     def __init__(self):
@@ -290,6 +291,9 @@ def main():
                             # Open storage UI
                             storage_ui = StorageUI(screen, player_inventory, block, texture_atlas)
                             storage_ui.run()
+                        elif isinstance(block, b.FurnaceBlock):
+                            furnace_ui = FurnaceUI(screen, player_inventory, block, texture_atlas)
+                            furnace_ui.run()
             if event.type == pygame.KEYDOWN:
                 # New: Press "n" to cycle weather for testing instead of "w"
                 if event.key == pygame.K_n:
@@ -488,16 +492,16 @@ def main():
                         if block.name in tool.effective_against:
                             world_chunks[chunk_index][world_y][local_x] = b.AIR
                             broken_block = True
-                            if block.drop_item:
-                                player_inventory.add_item(block.drop_item, 1)
+                            if block.item_variant:  # Changed from drop_item to item_variant
+                                player_inventory.add_item(block.item_variant, 1)
                             print(f"Effective break: {block.name} with {tool.name}")
                         else:
                             print(f"{tool.name} is not effective against {block.name}")
                     else:
                         world_chunks[chunk_index][world_y][local_x] = b.AIR
                         broken_block = True
-                        if block.drop_item:
-                            player_inventory.add_item(block.drop_item, 1)
+                        if block.item_variant:  # Changed from drop_item to item_variant
+                            player_inventory.add_item(block.item_variant, 1)
                         print(f"Breaking block: {block.name}, drop_item: {block.drop_item}")
                 # Right click: process placement in action mode
                 if mouse_buttons[2] and not placed_water:
@@ -508,8 +512,8 @@ def main():
                         block_world_rect = pygame.Rect(world_x * block_size, world_y * block_size, block_size, block_size)
                         print(f"Attempting to place block: {block_to_place.name} at ({world_x}, {world_y})")  # Debugging
                         if world_chunks[chunk_index][world_y][local_x] == b.AIR and not player.rect.colliderect(block_world_rect):
-                            # Check if we're placing a storage block and create a new instance
-                            if isinstance(block_to_place, b.StorageBlock):
+                            # Check if we're placing a storage or furnace block and create a new instance
+                            if isinstance(block_to_place, (b.StorageBlock, b.FurnaceBlock)):
                                 block_to_place = block_to_place.create_instance()
                             
                             world_chunks[chunk_index][world_y][local_x] = block_to_place

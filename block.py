@@ -1,4 +1,4 @@
-from item import Item  # added import
+from item import Item, IRON_INGOT, GOLD_INGOT, MELTABLE_ITEMS, FUEL_ITEMS  # Add to imports at top
 import pygame
 import config as c
 
@@ -38,33 +38,170 @@ class StorageBlock(Block):
     def __init__(self, id, name, texture_coords):
         super().__init__(id, name, True, (139, 69, 19), texture_coords)
         self.has_inventory = True
-        self.max_slots = 27  # 3 rows of 9 slots
-        # Remove shared inventory initialization
-        # Each instance will get its own inventory when placed
+        self.max_slots = 27
+        self.inventory = [None] * self.max_slots  # Initialize inventory here
 
     def create_instance(self):
-        """Create a new instance of the storage block with its own inventory"""
         new_block = StorageBlock(self.id, self.name, self.texture_coords)
-        # Initialize inventory for this specific instance
         new_block.inventory = [None] * self.max_slots
-        # Copy over other properties
         new_block.item_variant = self.item_variant
         new_block.drop_item = self.drop_item
         return new_block
 
-    def add_item(self, item, quantity=1):
-        # Find first empty slot
-        for i in range(self.max_slots):
-            if self.inventory[i] is None:
-                self.inventory[i] = {"item": item, "quantity": quantity}
-                return True
-        return False
+    def to_dict(self):
+        """Serialize block data for saving"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'inventory': [
+                {'item_id': slot['item'].id, 'quantity': slot['quantity']} 
+                if slot and slot.get('item') else None 
+                for slot in self.inventory
+            ]
+        }
 
-    def remove_item(self, slot_index):
-        if 0 <= slot_index < self.max_slots and self.inventory[slot_index] is not None:
-            item = self.inventory[slot_index]
-            self.inventory[slot_index] = None
-            return item
+    def from_dict(self, data, item_registry):
+        """Deserialize block data when loading"""
+        self.inventory = []
+        for slot_data in data['inventory']:
+            if slot_data is None:
+                self.inventory.append(None)
+            else:
+                item = item_registry.get(slot_data['item_id'])
+                if item:
+                    self.inventory.append({
+                        'item': item,
+                        'quantity': slot_data['quantity']
+                    })
+                else:
+                    self.inventory.append(None)
+
+class FurnaceBlock(Block):
+    def __init__(self, id, name, texture_coords):
+        super().__init__(id, name, True, (100, 100, 100), texture_coords)
+        self.has_inventory = True
+        self.fuel_slot = None
+        self.input_slot = None
+        self.output_slot = None
+        self.is_burning = False
+        self.burn_time_remaining = 0
+        self.melt_progress = 0
+
+    def create_instance(self):
+        """Create a new instance of the furnace with its own inventory"""
+        new_block = FurnaceBlock(self.id, self.name, self.texture_coords)
+        # Initialize slots
+        new_block.fuel_slot = None
+        new_block.input_slot = None
+        new_block.output_slot = None
+        new_block.item_variant = self.item_variant
+        new_block.drop_item = self.drop_item
+        return new_block
+
+    def can_accept_fuel(self, item):
+        return item and hasattr(item, 'burn_time') and item.burn_time > 0
+
+    def can_melt(self, item):
+        return item and hasattr(item, 'melt_result')
+
+    def update(self, dt):
+        # Reset burning state if no input or fuel is present
+        if not self.input_slot or not self.fuel_slot:
+            self.is_burning = False
+            self.melt_progress = 0
+            self.burn_time_remaining = 0
+            return
+
+        # Check if we should start burning
+        if not self.is_burning:
+            if (self.fuel_slot.get("item") and self.input_slot.get("item")):
+                fuel_item = self.fuel_slot["item"]
+                input_item = self.input_slot["item"]
+                
+                if self.can_accept_fuel(fuel_item) and self.can_melt(input_item):
+                    # Check if output slot allows for melting
+                    can_output = False
+                    melt_result = input_item.melt_result
+                    
+                    if not self.output_slot or self.output_slot.get("item") is None:
+                        can_output = True
+                    elif (self.output_slot["item"].id == melt_result.id and 
+                          self.output_slot["quantity"] < self.output_slot["item"].stack_size):
+                        can_output = True
+                    
+                    if can_output:
+                        self.is_burning = True
+                        self.burn_time_remaining = fuel_item.burn_time
+                        self.fuel_slot["quantity"] -= 1
+                        if self.fuel_slot["quantity"] <= 0:
+                            self.fuel_slot = {"item": None, "quantity": 0}
+
+        # Process melting if burning
+        if self.is_burning and self.input_slot.get("item"):
+            self.burn_time_remaining -= dt
+            self.melt_progress += dt
+
+            if self.melt_progress >= 1000:  # 1 second to melt
+                input_item = self.input_slot["item"]
+                melt_result = input_item.melt_result
+                
+                # Create or update output slot
+                if not self.output_slot or self.output_slot.get("item") is None:
+                    self.output_slot = {"item": melt_result, "quantity": 1}
+                elif self.output_slot["quantity"] < self.output_slot["item"].stack_size:
+                    self.output_slot["quantity"] += 1
+
+                # Update input slot
+                self.input_slot["quantity"] -= 1
+                if self.input_slot["quantity"] <= 0:
+                    self.input_slot = {"item": None, "quantity": 0}
+
+                self.melt_progress = 0
+
+            # Check if burning should stop
+            if self.burn_time_remaining <= 0:
+                self.is_burning = False
+                self.melt_progress = 0
+
+    def to_dict(self):
+        """Serialize furnace data for saving"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'fuel_slot': self._slot_to_dict(self.fuel_slot),
+            'input_slot': self._slot_to_dict(self.input_slot),
+            'output_slot': self._slot_to_dict(self.output_slot),
+            'is_burning': self.is_burning,
+            'burn_time_remaining': self.burn_time_remaining,
+            'melt_progress': self.melt_progress
+        }
+
+    def _slot_to_dict(self, slot):
+        if slot and slot.get('item'):
+            return {
+                'item_id': slot['item'].id,
+                'quantity': slot['quantity']
+            }
+        return None
+
+    def from_dict(self, data, item_registry):
+        """Deserialize furnace data when loading"""
+        self.is_burning = data['is_burning']
+        self.burn_time_remaining = data['burn_time_remaining']
+        self.melt_progress = data['melt_progress']
+
+        self.fuel_slot = self._dict_to_slot(data['fuel_slot'], item_registry)
+        self.input_slot = self._dict_to_slot(data['input_slot'], item_registry)
+        self.output_slot = self._dict_to_slot(data['output_slot'], item_registry)
+
+    def _dict_to_slot(self, slot_data, item_registry):
+        if slot_data:
+            item = item_registry.get(slot_data['item_id'])
+            if item:
+                return {
+                    'item': item,
+                    'quantity': slot_data['quantity']
+                }
         return None
 
 # Define standard blocks
@@ -109,12 +246,38 @@ SPAWNER = Block(22, "Spawner", True, (255, 0, 0), (5, 5), entity_type="mob")
 # Add new STORAGE block
 STORAGE = StorageBlock(23, "Storage", (15, 1))  # Adjust texture coordinates as needed
 
+# Add new FURNACE block
+FURNACE = FurnaceBlock(24, "Furnace", (16, 1))  # Adjust texture coordinates as needed
+
 # NEW: Automatically create item variants and assign drop_item for each block except AIR.
-for blk in (GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE, WOOD, LEAVES, LEAVESGG, SPAWNER, STORAGE):
+for blk in (GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE, WOOD, LEAVES, LEAVESGG, SPAWNER, STORAGE, FURNACE):
     item_variant = Item(blk.id, blk.name, blk.texture_coords, stack_size=64, is_block=True)
     item_variant.block = blk  # reference back to the block
     blk.item_variant = item_variant
     blk.drop_item = item_variant
+
+# Set burn times and melt results here instead of in item.py
+WOOD.item_variant.burn_time = 1000  # Wood burns for 1 second
+IRON_ORE.item_variant.melt_result = IRON_INGOT
+GOLD_ORE.item_variant.melt_result = GOLD_INGOT
+
+# Create coal item first
+COAL_ITEM = Item(25, "Coal", (20, 7), stack_size=64, burn_time=2000)
+
+# Update the MELTABLE_ITEMS registry
+MELTABLE_ITEMS.update({
+    IRON_ORE.id: IRON_INGOT,
+    GOLD_ORE.id: GOLD_INGOT,
+    COAL_ORE.id: COAL_ITEM  # Add coal ore melting to coal item
+})
+
+FUEL_ITEMS.update({
+    WOOD.id: 1000,    # Wood burns for 1 second
+    COAL_ITEM.id: 2000  # Coal burns for 2 seconds
+})
+
+# Add melt result for coal ore
+COAL_ORE.item_variant.melt_result = COAL_ITEM
 
 # Ensure SPAWNER_ITEM is defined
 SPAWNER_ITEM = SPAWNER.item_variant
@@ -135,5 +298,6 @@ BLOCK_MAP = {
     20: LEAVES,  # NEW: Leaves block added
     21: LEAVESGG,  # NEW: Leaves block added
     22: SPAWNER,  # NEW: Spawner block added
-    23: STORAGE  # NEW: Storage block added
+    23: STORAGE,  # NEW: Storage block added
+    24: FURNACE  # NEW: Furnace block added
 }

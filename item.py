@@ -2,20 +2,24 @@ import pygame
 import config as c
 
 class Item:
-    def __init__(self, id, name, texture_coords, stack_size=1, is_block=False, is_armor=False, tint=None, effective_against=None, consumable_type=None, hunger_restore=0, thirst_restore=0, health_restore=0):
+    def __init__(self, id, name, texture_coords, stack_size=64, is_block=False, burn_time=0, effective_against=None, 
+                 consumable_type=None, hunger_restore=0, thirst_restore=0, health_restore=0):
         self.id = id
         self.name = name
         self.texture_coords = texture_coords
         self.stack_size = stack_size
         self.is_block = is_block
-        self.is_armor = is_armor  # NEW: Add is_armor attribute
-        self.tint = tint  # Tint color to modify item appearance
-        self.effective_against = effective_against  # List of block names this item is effective against
-        self.consumable_type = consumable_type  # Type of consumable (e.g., "food", "drink", "potion")
-        self.hunger_restore = hunger_restore  # Amount of hunger restored
-        self.thirst_restore = thirst_restore  # Amount of thirst restored
-        self.health_restore = health_restore  # Amount of health restored
-        self.block = None  # Reference to the block if this item is a block
+        self.is_armor = False
+        self.effective_against = effective_against or []
+        self.consumable_type = consumable_type
+        self.block = None
+        self.burn_time = burn_time
+        self.melt_result = None
+        self.hunger_restore = hunger_restore
+        self.thirst_restore = thirst_restore
+        self.health_restore = health_restore
+        self.tint = None  # Added this for the get_texture method
+        self.type = None  # Add this line to store item type
 
     def get_texture(self, atlas):
         block_size = c.BLOCK_SIZE
@@ -52,7 +56,42 @@ ITEM_SHOVEL = Item(102, "Shovel", (2, 0), stack_size=1, effective_against=["Dirt
 ITEM_SWORD = Item(103, "Sword", (3, 0), stack_size=1)
 
 # New test items for consumables:
-APPLE = Item(103, "Apple", (0, 0), stack_size=10, consumable_type="food", hunger_restore=20)
-WATER_BOTTLE = Item(104, "Water Bottle", (0, 1), stack_size=10, consumable_type="drink", thirst_restore=30)
+APPLE = Item(104, "Apple", (0, 0), stack_size=10, consumable_type="food", hunger_restore=20)
+WATER_BOTTLE = Item(105, "Water Bottle", (0, 1), stack_size=10, consumable_type="drink", thirst_restore=30)
 
-# ...add additional item types or subclasses as needed...
+# Define meltable items and their results
+IRON_INGOT = Item(200, "Iron Ingot", (20, 1), stack_size=64)
+GOLD_INGOT = Item(201, "Gold Ingot", (20, 2), stack_size=64)
+COAL = Item(202, "Coal", (20, 3), stack_size=64, burn_time=2000)  # Coal burns for 2 seconds
+
+# Create registries for items that can be melted or used as fuel
+MELTABLE_ITEMS = {}  # Will be populated from block.py
+FUEL_ITEMS = {
+    COAL.id: 2000    # Coal burns for 2 seconds
+}
+
+# Create armor items with types
+IRON_HELMET = Item(30, "Iron Helmet", (5, 1), stack_size=1)
+IRON_HELMET.type = "helmet"
+
+IRON_CHESTPLATE = Item(31, "Iron Chestplate", (5, 2), stack_size=1)
+IRON_CHESTPLATE.type = "chestplate"
+
+IRON_LEGGINGS = Item(32, "Iron Leggings", (5, 3), stack_size=1)
+IRON_LEGGINGS.type = "leggings"
+
+IRON_BOOTS = Item(33, "Iron Boots", (5, 4), stack_size=1)
+IRON_BOOTS.type = "boots"
+
+# Tools and weapons with types
+IRON_SWORD = Item(40, "Iron Sword", (6, 1), stack_size=1)
+IRON_SWORD.type = "weapon"
+
+IRON_PICKAXE = Item(41, "Iron Pickaxe", (6, 2), stack_size=1)
+IRON_PICKAXE.type = "tool"
+
+IRON_AXE = Item(42, "Iron Axe", (6, 3), stack_size=1)
+IRON_AXE.type = "tool"
+
+IRON_SHOVEL = Item(43, "Iron Shovel", (6, 4), stack_size=1)
+IRON_SHOVEL.type = "tool"

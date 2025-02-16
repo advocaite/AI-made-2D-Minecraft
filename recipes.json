@@ -37,5 +37,125 @@
             "stack_size": 1,
             "is_block": false
         }
+    },
+    "storage": {
+        "ingredients": [{
+            "item_id": 19,
+            "name": "Wood",
+            "quantity": 9
+        }],
+        "result": {
+            "item_id": 23,
+            "name": "Storage",
+            "texture_coords": [15, 1],
+            "stack_size": 64,
+            "is_block": true
+        }
+    },
+    "furnace": {
+        "ingredients": [{
+            "item_id": 4,
+            "name": "Stone",
+            "quantity": 8
+        }],
+        "result": {
+            "item_id": 24,
+            "name": "Furnace",
+            "texture_coords": [16, 1],
+            "stack_size": 64,
+            "is_block": true
+        }
+    },
+    "IRON_HELMET": {
+        "ingredients": [
+            { "item_id": 200, "quantity": 5 }
+        ],
+        "result": {
+            "item_id": 30,
+            "name": "Iron Helmet",
+            "texture_coords": [5, 1],
+            "stack_size": 1
+        }
+    },
+    "IRON_CHESTPLATE": {
+        "ingredients": [
+            { "item_id": 200, "quantity": 8 }
+        ],
+        "result": {
+            "item_id": 31,
+            "name": "Iron Chestplate",
+            "texture_coords": [5, 2],
+            "stack_size": 1
+        }
+    },
+    "IRON_LEGGINGS": {
+        "ingredients": [
+            { "item_id": 200, "quantity": 7 }
+        ],
+        "result": {
+            "item_id": 32,
+            "name": "Iron Leggings",
+            "texture_coords": [5, 3],
+            "stack_size": 1
+        }
+    },
+    "IRON_BOOTS": {
+        "ingredients": [
+            { "item_id": 200, "quantity": 4 }
+        ],
+        "result": {
+            "item_id": 33,
+            "name": "Iron Boots",
+            "texture_coords": [5, 4],
+            "stack_size": 1
+        }
+    },
+    "IRON_SWORD": {
+        "ingredients": [
+            { "item_id": 200, "quantity": 2 },
+            { "item_id": 10, "quantity": 1 }
+        ],
+        "result": {
+            "item_id": 40,
+            "name": "Iron Sword",
+            "texture_coords": [6, 1],
+            "stack_size": 1
+        }
+    },
+    "IRON_PICKAXE": {
+        "ingredients": [
+            { "item_id": 200, "quantity": 3 },
+            { "item_id": 10, "quantity": 2 }
+        ],
+        "result": {
+            "item_id": 41,
+            "name": "Iron Pickaxe",
+            "texture_coords": [6, 2],
+            "stack_size": 1
+        }
+    },
+    "IRON_AXE": {
+        "ingredients": [
+            { "item_id": 200, "quantity": 3 },
+            { "item_id": 10, "quantity": 2 }
+        ],
+        "result": {
+            "item_id": 42,
+            "name": "Iron Axe",
+            "texture_coords": [6, 3],
+            "stack_size": 1
+        }
+    },
+    "IRON_SHOVEL": {
+        "ingredients": [
+            { "item_id": 200, "quantity": 1 },
+            { "item_id": 10, "quantity": 2 }
+        ],
+        "result": {
+            "item_id": 43,
+            "name": "Iron Shovel",
+            "texture_coords": [6, 4],
+            "stack_size": 1
+        }
     }
 }

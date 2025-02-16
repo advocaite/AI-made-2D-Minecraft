@@ -129,21 +129,77 @@ class SaveManager:
             print(f"Player file {self.player_file} does not exist.")
         return None
 
-    def load_all(self, item_map):
-        loaded_world = None
-        loaded_player = None
-        if os.path.exists(self.world_file):
-            with open(self.world_file, "r") as f:
-                data = json.load(f)
-            loaded_world = {}
-            for ci, grid in data.items():
-                loaded_world[int(ci)] = [[item_map.get(block_id) for block_id in row] for row in grid]
-        if os.path.exists(self.player_file):
-            loaded_player = self.load_player(item_map)
-        return loaded_world, loaded_player
-
     def save_all(self, world_chunks, player, inventory):
-        self.save_world(world_chunks)
-        print("Saving player data...")
+        """Save both world and player data"""
+        world_data = {}
+        for chunk_index, chunk in world_chunks.items():
+            chunk_data = []
+            for row in chunk:
+                row_data = []
+                for block in row:
+                    if hasattr(block, 'to_dict'):
+                        # Save special block data (Storage, Furnace)
+                        row_data.append(block.to_dict())
+                    else:
+                        # Save regular block
+                        row_data.append(block.id if block else 0)
+                chunk_data.append(row_data)
+            world_data[str(chunk_index)] = chunk_data
+
+        with open(self.world_file, 'w') as f:
+            json.dump(world_data, f)
+
+        # Save player data
         self.save_player(player, inventory)
-        print("Player data saved.")
+
+    def load_all(self, block_map):
+        """Load both world and player data"""
+        try:
+            # Load world data
+            if not os.path.exists(self.world_file):
+                print(f"World file not found: {self.world_file}")
+                return None, None
+
+            with open(self.world_file, 'r') as f:
+                world_data = json.load(f)
+
+            from item import MELTABLE_ITEMS, FUEL_ITEMS, Item  # Get item registry
+            from block import BLOCK_MAP  # Get block registry
+            # Combine all item registries
+            item_registry = {}
+            item_registry.update(MELTABLE_ITEMS)
+            item_registry.update(FUEL_ITEMS)
+            # Add block items to registry
+            for block_id, block in BLOCK_MAP.items():
+                if hasattr(block, 'item_variant'):
+                    item_registry[block_id] = block.item_variant
+
+            loaded_chunks = {}
+            for chunk_index_str, chunk_data in world_data.items():
+                chunk_index = int(chunk_index_str)
+                chunk = []
+                for row in chunk_data:
+                    new_row = []
+                    for block_data in row:
+                        if isinstance(block_data, dict):
+                            # Load special block data (Storage, Furnace)
+                            block_id = block_data['id']
+                            block = block_map[block_id].create_instance()
+                            block.from_dict(block_data, item_registry)
+                            new_row.append(block)
+                        else:
+                            # Load regular block
+                            new_row.append(block_map[block_data])
+                    chunk.append(new_row)
+                loaded_chunks[chunk_index] = chunk
+
+            # Load player data
+            player_data = self.load_player(item_registry)
+
+            return loaded_chunks, player_data
+
+        except Exception as e:
+            print(f"Error loading game data: {e}")
+            return None, None
+
+    # ...rest of existing code...
