@@ -110,7 +110,7 @@ class FurnaceBlock(Block):
 
     def update(self, dt):
         """Process furnace smelting"""
-        # Debug current state with safe checks
+        # Debug current state
         print(f"\nFurnace Update:")
         if self.input_slot and self.input_slot.get("item"):
             print(f"Input: {self.input_slot['item'].name} x{self.input_slot['quantity']}")
@@ -126,77 +126,84 @@ class FurnaceBlock(Block):
         print(f"Burn time remaining: {self.burn_time_remaining}")
         print(f"Melt progress: {self.melt_progress}")
 
-        # Rest of furnace update logic
+        # Check for valid input and fuel
         if not (self.input_slot and self.input_slot.get("item") and 
                 self.fuel_slot and self.fuel_slot.get("item")):
             self.is_burning = False
             self.melt_progress = 0
             self.burn_time_remaining = 0
-            print("No input or fuel - resetting furnace state")
             return
 
-        # Check if we should start burning
+        input_item = self.input_slot["item"]
+        fuel_item = self.fuel_slot["item"]
+
+        # Start new burn cycle if needed
         if not self.is_burning:
-            fuel_item = self.fuel_slot["item"]
-            input_item = self.input_slot["item"]
+            if not hasattr(input_item, 'melt_result') or not input_item.melt_result:
+                print(f"Item {input_item.name} cannot be melted")
+                return
+
+            if not hasattr(fuel_item, 'burn_time') or not fuel_item.burn_time:
+                print(f"Item {fuel_item.name} cannot be used as fuel")
+                return
+
+            # Check if output allows for melting - FIXED LOGIC HERE
+            melt_result = input_item.melt_result
+            can_output = False
             
-            print(f"Checking new burn cycle:")
-            print(f"Fuel: {fuel_item.name}, Input: {input_item.name}")
-            
-            if self.can_accept_fuel(fuel_item) and self.can_melt(input_item):
-                melt_result = input_item.melt_result
-                print(f"Can melt {input_item.name} into {melt_result.name}")
-                
-                # Check if output slot allows for melting
-                can_output = False
-                if not self.output_slot or self.output_slot.get("item") is None:
-                    can_output = True
-                    print("Output slot is empty")
-                elif (self.output_slot["item"].id == melt_result.id and 
-                      self.output_slot["quantity"] < self.output_slot["item"].stack_size):
-                    can_output = True
-                    print("Output slot can stack more items")
-                
-                if can_output:
-                    self.is_burning = True
-                    self.burn_time_remaining = fuel_item.burn_time
-                    self.fuel_slot["quantity"] -= 1
-                    if self.fuel_slot["quantity"] <= 0:
-                        self.fuel_slot = None
-                    print(f"Started burning: time={self.burn_time_remaining}")
+            # Can smelt if output is empty
+            if not self.output_slot or not self.output_slot.get("item"):
+                can_output = True
+            # Or if output has same item and not at max stack
+            elif (self.output_slot["item"].id == melt_result.id and 
+                  self.output_slot["quantity"] < melt_result.stack_size):
+                can_output = True
+
+            if can_output:
+                self.is_burning = True
+                self.burn_time_remaining = fuel_item.burn_time
+                self.fuel_slot["quantity"] -= 1
+                if self.fuel_slot["quantity"] <= 0:
+                    self.fuel_slot = None
+                print(f"Started burning with {self.burn_time_remaining}ms remaining")
 
         # Process melting if burning
-        if self.is_burning and self.input_slot.get("item"):
+        if self.is_burning:
             self.burn_time_remaining -= dt
             self.melt_progress += dt
-            print(f"Burning: progress={self.melt_progress}, remaining={self.burn_time_remaining}")
 
             if self.melt_progress >= 1000:  # 1 second to melt
-                input_item = self.input_slot["item"]
                 melt_result = input_item.melt_result
-                print(f"Melt complete: creating {melt_result.name}")
                 
-                # Create or update output slot
-                if not self.output_slot:
+                # Create or update output slot - FIXED LOGIC HERE
+                if not self.output_slot or not self.output_slot.get("item"):
                     self.output_slot = {"item": melt_result, "quantity": 1}
-                    print("Created new output stack")
-                else:
+                elif self.output_slot["item"].id == melt_result.id:
                     self.output_slot["quantity"] += 1
-                    print(f"Added to existing stack: now {self.output_slot['quantity']}")
-
-                # Update input slot
+                
+                # Consume input
                 self.input_slot["quantity"] -= 1
                 if self.input_slot["quantity"] <= 0:
                     self.input_slot = None
-                print("Consumed input item")
 
                 self.melt_progress = 0
+                print(f"Melted item: created {melt_result.name}")
 
-            # Check if burning should stop
+            # Stop burning if time expired or output full
             if self.burn_time_remaining <= 0:
                 self.is_burning = False
-                self.melt_progress = 0
-                print("Burn cycle complete")
+                print("Burn cycle complete - fuel depleted")
+            elif (self.output_slot and self.output_slot.get("item") and 
+                  self.output_slot["quantity"] >= self.output_slot["item"].stack_size):
+                self.is_burning = False
+                print("Burn cycle complete - output full")
+
+        # Final state debug
+        print(f"End state - burning: {self.is_burning}, progress: {self.melt_progress}")
+        if self.output_slot and self.output_slot.get("item"):
+            print(f"Output slot: {self.output_slot['item'].name} x{self.output_slot['quantity']}")
+        else:
+            print("Output slot: Empty")
 
     def to_dict(self):
         """Serialize furnace data for saving"""
