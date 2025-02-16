@@ -34,6 +34,39 @@ class Block:
             self._cached_texture = tinted
         return self._cached_texture
 
+class StorageBlock(Block):
+    def __init__(self, id, name, texture_coords):
+        super().__init__(id, name, True, (139, 69, 19), texture_coords)
+        self.has_inventory = True
+        self.max_slots = 27  # 3 rows of 9 slots
+        # Remove shared inventory initialization
+        # Each instance will get its own inventory when placed
+
+    def create_instance(self):
+        """Create a new instance of the storage block with its own inventory"""
+        new_block = StorageBlock(self.id, self.name, self.texture_coords)
+        # Initialize inventory for this specific instance
+        new_block.inventory = [None] * self.max_slots
+        # Copy over other properties
+        new_block.item_variant = self.item_variant
+        new_block.drop_item = self.drop_item
+        return new_block
+
+    def add_item(self, item, quantity=1):
+        # Find first empty slot
+        for i in range(self.max_slots):
+            if self.inventory[i] is None:
+                self.inventory[i] = {"item": item, "quantity": quantity}
+                return True
+        return False
+
+    def remove_item(self, slot_index):
+        if 0 <= slot_index < self.max_slots and self.inventory[slot_index] is not None:
+            item = self.inventory[slot_index]
+            self.inventory[slot_index] = None
+            return item
+        return None
+
 # Define standard blocks
 AIR = Block(0, "Air", False, (255, 255, 255), (0, 0))
 GRASS = Block(1, "Grass", True, (34, 139, 34), (1, 10))
@@ -73,8 +106,11 @@ LEAVESGG = Block(
 # Define the new Spawner block with entity type
 SPAWNER = Block(22, "Spawner", True, (255, 0, 0), (5, 5), entity_type="mob")
 
+# Add new STORAGE block
+STORAGE = StorageBlock(23, "Storage", (15, 1))  # Adjust texture coordinates as needed
+
 # NEW: Automatically create item variants and assign drop_item for each block except AIR.
-for blk in (GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE, WOOD, LEAVES, LEAVESGG, SPAWNER):
+for blk in (GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE, WOOD, LEAVES, LEAVESGG, SPAWNER, STORAGE):
     item_variant = Item(blk.id, blk.name, blk.texture_coords, stack_size=64, is_block=True)
     item_variant.block = blk  # reference back to the block
     blk.item_variant = item_variant
@@ -98,5 +134,6 @@ BLOCK_MAP = {
     19: WOOD,
     20: LEAVES,  # NEW: Leaves block added
     21: LEAVESGG,  # NEW: Leaves block added
-    22: SPAWNER  # NEW: Spawner block added
+    22: SPAWNER,  # NEW: Spawner block added
+    23: STORAGE  # NEW: Storage block added
 }

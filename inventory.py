@@ -106,6 +106,19 @@ class Inventory:
             return self.hotbar[self.selected_hotbar_index]
         return None
 
+    def get_item(self, slot_index):
+        """Get item from a slot in main inventory."""
+        if 0 <= slot_index < len(self.main):
+            return self.main[slot_index]
+        return None
+
+    def set_item(self, slot_index, item_data):
+        """Set item in a slot in main inventory."""
+        if 0 <= slot_index < len(self.main):
+            self.main[slot_index] = item_data
+            return True
+        return False
+
     def draw(self, surface, atlas):
         self.draw_hotbar(surface, atlas)
         # Similar drawing can be implemented for armor and main inventory as needed.
@@ -134,6 +147,39 @@ class Inventory:
                     font = pygame.font.SysFont(None, 24)
                     amount_surf = font.render(str(slot["quantity"]), True, (255, 255, 255))
                     surface.blit(amount_surf, (rect.right - amount_surf.get_width(), rect.bottom - amount_surf.get_height()))
+
+    def draw_inventory(self, screen, texture_atlas, x, y):
+        """Draw the main inventory grid (excluding hotbar)."""
+        slot_size = 40
+        slot_padding = 5
+        rows = 4  # Standard inventory rows
+        cols = 9  # Standard inventory columns
+        
+        # Draw main inventory slots
+        for i, slot in enumerate(self.main):
+            row = i // cols
+            col = i % cols
+            slot_x = x + col * (slot_size + slot_padding)
+            slot_y = y + row * (slot_size + slot_padding)
+            
+            # Draw slot background
+            pygame.draw.rect(screen, (100, 100, 100), (slot_x, slot_y, slot_size, slot_size))
+            
+            # Draw item if present
+            if slot and "item" in slot and slot["item"]:
+                item = slot["item"]
+                quantity = slot["quantity"]
+                tx, ty = item.texture_coords
+                texture_rect = pygame.Rect(tx * 16, ty * 16, 16, 16)  # Assuming 16x16 textures
+                item_texture = texture_atlas.subsurface(texture_rect)
+                scaled_texture = pygame.transform.scale(item_texture, (slot_size-8, slot_size-8))
+                screen.blit(scaled_texture, (slot_x+4, slot_y+4))
+                
+                # Draw quantity if more than 1
+                if quantity > 1:
+                    font = pygame.font.SysFont(None, 24)
+                    quantity_text = font.render(str(quantity), True, (255, 255, 255))
+                    screen.blit(quantity_text, (slot_x + slot_size - 20, slot_y + slot_size - 20))
 
     def refill_hotbar(self):
         if not self.hotbar:

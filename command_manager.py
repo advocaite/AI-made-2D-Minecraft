@@ -35,7 +35,7 @@ class CommandManager:
                     key = tokens[1].upper()
                 quantity = int(tokens[2]) if len(tokens) > 2 else 1
                 from item import ITEM_PICKAXE, ITEM_SWORD, ITEM_AXE, APPLE, WATER_BOTTLE
-                from block import SPAWNER_ITEM
+                from block import SPAWNER_ITEM, STORAGE  # Add STORAGE import
                 item_map = {
                     ITEM_PICKAXE.id: ITEM_PICKAXE,
                     ITEM_SWORD.id: ITEM_SWORD,
@@ -47,7 +47,9 @@ class CommandManager:
                     "AXE": ITEM_AXE,
                     "APPLE": APPLE,
                     "WATER_BOTTLE": WATER_BOTTLE,
-                    "SPAWNER": SPAWNER_ITEM
+                    "SPAWNER": SPAWNER_ITEM,
+                    "STORAGE": STORAGE.item_variant,  # Add storage item variant
+                    STORAGE.id: STORAGE.item_variant,  # Add numeric ID mapping too
                 }
                 print(f"[DEBUG] Spawning item. Key: {key}, Quantity: {quantity}")
                 if key in item_map:

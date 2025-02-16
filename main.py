@@ -17,6 +17,7 @@ from console import Console  # new import
 from parallax_background import ParallaxBackground  # new import for parallax backgrounds
 from mob import Mob  # new import for Mob class
 from death_menu import DeathMenu  # new import
+from storage_ui import StorageUI  # new import
 
 class World:
     def __init__(self):
@@ -275,6 +276,20 @@ def main():
                 else:
                     # In action mode, delegate handling to ActionModeController.
                     action_mode_controller.handle_mouse_event(event, world_chunks, player, cam_offset_x, cam_offset_y, block_size, chunk_width, world_height)
+                if event.button == 3 and not action_mode:  # Right click in movement mode
+                    # Get block at mouse position
+                    mouse_x, mouse_y = event.pos
+                    world_x = int((mouse_x + cam_offset_x) // block_size)
+                    world_y = int((mouse_y + cam_offset_y) // block_size)
+                    chunk_index = world_x // chunk_width
+                    local_x = world_x % chunk_width
+                    
+                    if chunk_index in world_chunks and 0 <= world_y < world_height:
+                        block = world_chunks[chunk_index][world_y][local_x]
+                        if isinstance(block, b.StorageBlock):
+                            # Open storage UI
+                            storage_ui = StorageUI(screen, player_inventory, block, texture_atlas)
+                            storage_ui.run()
             if event.type == pygame.KEYDOWN:
                 # New: Press "n" to cycle weather for testing instead of "w"
                 if event.key == pygame.K_n:
@@ -493,6 +508,10 @@ def main():
                         block_world_rect = pygame.Rect(world_x * block_size, world_y * block_size, block_size, block_size)
                         print(f"Attempting to place block: {block_to_place.name} at ({world_x}, {world_y})")  # Debugging
                         if world_chunks[chunk_index][world_y][local_x] == b.AIR and not player.rect.colliderect(block_world_rect):
+                            # Check if we're placing a storage block and create a new instance
+                            if isinstance(block_to_place, b.StorageBlock):
+                                block_to_place = block_to_place.create_instance()
+                            
                             world_chunks[chunk_index][world_y][local_x] = block_to_place
                             placed_water = True
                             print(f"Block placed: {block_to_place.name} at ({world_x}, {world_y})")
