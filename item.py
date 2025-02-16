@@ -2,24 +2,33 @@ import pygame
 import config as c
 
 class Item:
-    def __init__(self, id, name, texture_coords, stack_size=64, is_block=False, burn_time=0, effective_against=None, 
-                 consumable_type=None, hunger_restore=0, thirst_restore=0, health_restore=0):
+    def __init__(self, id, name, texture_coords, stack_size=64, is_block=False, **kwargs):
         self.id = id
         self.name = name
         self.texture_coords = texture_coords
         self.stack_size = stack_size
         self.is_block = is_block
         self.is_armor = False
-        self.effective_against = effective_against or []
-        self.consumable_type = consumable_type
+        self.effective_against = kwargs.get('effective_against', [])
+        self.consumable_type = kwargs.get('consumable_type', None)
         self.block = None
-        self.burn_time = burn_time
+        self.burn_time = kwargs.get('burn_time', 0)
         self.melt_result = None
-        self.hunger_restore = hunger_restore
-        self.thirst_restore = thirst_restore
-        self.health_restore = health_restore
+        self.hunger_restore = kwargs.get('hunger_restore', 0)
+        self.thirst_restore = kwargs.get('thirst_restore', 0)
+        self.health_restore = kwargs.get('health_restore', 0)
         self.tint = None  # Added this for the get_texture method
         self.type = None  # Add this line to store item type
+
+        # Add stat modifiers
+        self.modifiers = {
+            'damage': 0,
+            'defense': 0,
+            'health': 0,
+            'attack_speed': 0,
+            'movement_speed': 0
+        }
+        self.enhanced_suffix = ""  # For names like "Iron Sword of Sharpness"
 
     def get_texture(self, atlas):
         block_size = c.BLOCK_SIZE
@@ -49,6 +58,22 @@ class Item:
         # Return True if consumed successfully, False otherwise.
         return self.consumable_type is not None
 
+    def apply_enhancement(self, modifiers, suffix):
+        """Apply enhancement modifiers to the item"""
+        for stat, value in modifiers.items():
+            if stat in self.modifiers:
+                self.modifiers[stat] += value
+        self.enhanced_suffix = suffix
+        self.name = f"{self.name} {suffix}"
+
+    def get_stats_display(self):
+        """Get formatted string of item stats for tooltip"""
+        stats = []
+        for stat, value in self.modifiers.items():
+            if value != 0:
+                stats.append(f"{stat.replace('_', ' ').title()}: +{value}")
+        return "\n".join(stats)
+
 # Define tool items with effective_against set:
 ITEM_PICKAXE = Item(100, "Pickaxe", (0, 0), stack_size=1, effective_against=["Stone", "Dirt", "Coal Ore", "Iron Ore", "Gold Ore"])
 ITEM_AXE = Item(101, "Axe", (1, 0), stack_size=1, effective_against=["Wood"])
@@ -65,9 +90,15 @@ GOLD_INGOT = Item(201, "Gold Ingot", (20, 2), stack_size=64)
 COAL = Item(202, "Coal", (20, 3), stack_size=64, burn_time=2000)  # Coal burns for 2 seconds
 
 # Create registries for items that can be melted or used as fuel
-MELTABLE_ITEMS = {}  # Will be populated from block.py
+MELTABLE_ITEMS = {
+    17: IRON_INGOT,  # Iron Ore -> Iron Ingot
+    18: GOLD_INGOT,  # Gold Ore -> Gold Ingot
+    16: COAL        # Coal Ore -> Coal
+}
+
 FUEL_ITEMS = {
-    COAL.id: 2000    # Coal burns for 2 seconds
+    19: 1000,     # Wood burns for 1 second
+    202: 2000     # Coal burns for 2 seconds
 }
 
 # Create armor items with types
@@ -95,3 +126,29 @@ IRON_AXE.type = "tool"
 
 IRON_SHOVEL = Item(43, "Iron Shovel", (6, 4), stack_size=1)
 IRON_SHOVEL.type = "tool"
+
+# Update tooltip function to show modifiers
+def get_item_tooltip(item):
+    if not item:
+        return None
+
+    lines = [
+        f"{item.name}",
+        f"ID: {item.id}"
+    ]
+
+    # Add stats if they exist
+    stats = item.get_stats_display()
+    if stats:
+        lines.append("")  # Empty line for spacing
+        lines.extend(stats.split("\n"))
+
+    # Add other properties
+    if hasattr(item, 'burn_time'):
+        lines.append(f"Burn time: {item.burn_time/1000:.1f}s")
+    if hasattr(item, 'stack_size'):
+        lines.append(f"Stack size: {item.stack_size}")
+    if hasattr(item, 'is_block') and item.is_block:
+        lines.append("Placeable block")
+        
+    return '\n'.join(lines)

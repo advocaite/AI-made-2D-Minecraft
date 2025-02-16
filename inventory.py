@@ -9,11 +9,16 @@ class Inventory:
         self.armor = [{"item": None, "quantity": 0} for _ in range(6)]
         self.main = [{"item": None, "quantity": 0} for _ in range(32)]
         self.selected_hotbar_index = 0
+        self.player = None  # Add reference to player
         # Prefill hotbar with block items (excluding AIR).
         blocks = [blk for key, blk in sorted(BLOCK_MAP.items()) if blk != AIR]
         # Limit to available hotbar slots (1-9).
         for blk in blocks[:9]:
             self.fill_empty_hotbar_slot(blk.item_variant, 64)
+
+    def set_player(self, player):
+        """Set player reference for modifier updates"""
+        self.player = player
 
     def fill_empty_hotbar_slot(self, item_variant, quantity=1):
         for slot in self.hotbar:
@@ -27,36 +32,53 @@ class Inventory:
 
     def add_item(self, item, quantity=1):
         """Add an item to the inventory"""
-        print(f"Debug: Adding item {item.name} with quantity {quantity}")
+        self.log_debug(f"Adding {quantity} of {item.name}")
         
-        # First try to stack with existing items
-        for container in (self.hotbar, self.armor, self.main):
-            for slot in container:
-                if slot and slot["item"] and slot["item"].id == item.id and slot["quantity"] < item.stack_size:
-                    space = item.stack_size - slot["quantity"]
+        # First check existing stacks that aren't full
+        for slot in self.main + self.hotbar:
+            if slot and slot.get("item") and slot["item"].id == item.id:
+                self.log_debug(f"Found matching slot with {slot['quantity']} items")
+                if slot["quantity"] < slot["item"].stack_size:
+                    space = slot["item"].stack_size - slot["quantity"]
                     add_amount = min(space, quantity)
                     slot["quantity"] += add_amount
                     quantity -= add_amount
+                    self.log_debug(f"Added {add_amount} to existing stack, {quantity} remaining")
                     if quantity <= 0:
                         return True
 
+        # Debug empty slot detection
+        empty_slots = sum(1 for slot in self.main if not slot or not slot.get("item"))
+        self.log_debug(f"Found {empty_slots} empty slots in main inventory")
+
         # If we still have items to add, find empty slots
-        if quantity > 0:
-            # Try hotbar first
-            for slot in self.hotbar:
-                if not slot["item"]:  # Check the item field of the dict
-                    slot["item"] = item
-                    slot["quantity"] = quantity
+        for i in range(len(self.main)):
+            if not self.main[i] or not self.main[i].get("item"):
+                self.log_debug(f"Found empty main inventory slot {i}")
+                stack_size = min(item.stack_size, quantity)
+                self.main[i] = {"item": item, "quantity": stack_size}
+                quantity -= stack_size
+                self.log_debug(f"Created new stack of {stack_size} in slot {i}, {quantity} remaining")
+                if quantity <= 0:
                     return True
 
-            # Then try main inventory
-            for slot in self.main:
-                if not slot["item"]:  # Check the item field of the dict
-                    slot["item"] = item
-                    slot["quantity"] = quantity
+        # Try hotbar if main inventory is full
+        for i in range(len(self.hotbar)):
+            if not self.hotbar[i] or not self.hotbar[i].get("item"):
+                self.log_debug(f"Found empty hotbar slot {i}")
+                stack_size = min(item.stack_size, quantity)
+                self.hotbar[i] = {"item": item, "quantity": stack_size}
+                quantity -= stack_size
+                self.log_debug(f"Created new stack of {stack_size} in hotbar {i}, {quantity} remaining")
+                if quantity <= 0:
                     return True
 
-        return False
+        self.log_debug(f"Could not add all items, {quantity} remaining")
+        return quantity == 0
+
+    def log_debug(self, message):
+        """Add debug logging"""
+        print(f"[Inventory Debug] {message}")
 
     def update_quantity(self, slot, amount):
         """Update the quantity of an item in a given slot."""
@@ -65,6 +87,10 @@ class Inventory:
             if slot["quantity"] <= 0:
                 slot["item"] = None
                 slot["quantity"] = 0
+                # Update modifiers if this was the selected item
+                if self.player and slot == self.get_selected_item():
+                    self.player.update_modifiers(self)
+                    print("Updated modifiers after item depletion")
 
     def remove_item(self, slot_id, amount=1):
         """Remove items from a given slot id (1-indexed)"""
@@ -90,6 +116,21 @@ class Inventory:
     def select_hotbar_slot(self, index):
         if 0 <= index < len(self.hotbar):
             self.selected_hotbar_index = index
+            # Update modifiers when changing selected item
+            if self.player:
+                self.player.update_modifiers(self)
+                print(f"Updated modifiers for hotbar selection {index}")
+
+    def equip_armor(self, slot_index, item):
+        """Handle armor equipping with modifier updates"""
+        if 0 <= slot_index < len(self.armor):
+            old_item = self.armor[slot_index]
+            self.armor[slot_index] = item
+            if self.player:
+                self.player.update_modifiers(self)
+                print(f"Updated modifiers for armor change in slot {slot_index}")
+            return old_item
+        return None
 
     def get_selected_item(self):
         if 0 <= self.selected_hotbar_index < len(self.hotbar):
@@ -177,3 +218,31 @@ class Inventory:
             blocks = [blk for key, blk in sorted(BLOCK_MAP.items()) if blk != AIR]
             for blk in blocks[:9]:
                 self.fill_empty_hotbar_slot(blk.item_variant, 64)
+
+    def set_armor_slot(self, index, item):
+        """Handle equipping/unequipping armor pieces"""
+        if self.armor[index]:
+            # Unequip old item
+            old_item = self.armor[index]["item"]
+            self.player.unequip_item(old_item)
+        
+        if item:
+            # Equip new item
+            self.armor[index] = item
+            self.player.equip_item(item["item"])
+        else:
+            self.armor[index] = None
+
+    def set_hotbar_slot(self, index, item):
+        """Handle equipping/unequipping weapons and tools"""
+        if self.hotbar[index] and self.hotbar[index]["item"].type in ["weapon", "tool"]:
+            # Unequip old item
+            old_item = self.hotbar[index]["item"]
+            self.player.unequip_item(old_item)
+        
+        if item and item["item"].type in ["weapon", "tool"]:
+            # Equip new item
+            self.hotbar[index] = item
+            self.player.equip_item(item["item"])
+        else:
+            self.hotbar[index] = item

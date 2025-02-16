@@ -39,6 +39,21 @@ class Character:
         self.paused = False  # NEW: Track paused state
         self.inventory = None  # Add this line to store inventory reference
 
+        # Add base stats
+        self.base_stats = {
+            'damage': 10,
+            'defense': 5,
+            'health': 100,
+            'attack_speed': 1.0,
+            'movement_speed': 4.0
+        }
+        
+        # Add current stats (will include equipment bonuses)
+        self.current_stats = dict(self.base_stats)
+        
+        # Add equipped items tracking
+        self.equipped_items = []
+
         # Animation setup: load animations from characters/knight using 128x128 cells (added jump animation)
         base_path = os.path.join("characters", "knight")
         self.animations = {
@@ -286,3 +301,88 @@ class Character:
         draw_x = self.rect.x - cam_offset_x - (new_width - self.rect.width) // 2
         draw_y = self.rect.y + self.rect.height - new_height - cam_offset_y
         surface.blit(scaled_frame, (draw_x, draw_y))
+
+    def update_stats(self):
+        """Recalculate stats based on equipped items"""
+        # Reset to base stats
+        self.current_stats = dict(self.base_stats)
+        
+        # Add bonuses from equipped items
+        for item in self.equipped_items:
+            if hasattr(item, 'modifiers'):
+                for stat, value in item.modifiers.items():
+                    self.current_stats[stat] += value
+        
+        # Update derived attributes based on stats
+        self.max_health = self.current_stats['health']
+        self.speed = self.current_stats['movement_speed']
+        
+        print(f"Stats updated: {self.current_stats}")
+
+    def equip_item(self, item):
+        """Equip an item and update stats"""
+        if item not in self.equipped_items:
+            self.equipped_items.append(item)
+            self.update_stats()
+            print(f"Equipped {item.name}")
+
+    def unequip_item(self, item):
+        """Unequip an item and update stats"""
+        if item in self.equipped_items:
+            self.equipped_items.remove(item)
+            self.update_stats()
+            print(f"Unequipped {item.name}")
+
+    def get_damage(self):
+        """Get current attack damage including equipment bonuses"""
+        return self.current_stats['damage']
+
+    def get_defense(self):
+        """Get current defense including equipment bonuses"""
+        return self.current_stats['defense']
+
+    def take_damage(self, amount):
+        """Take damage considering defense stat"""
+        # Defense reduces damage by a percentage
+        defense_multiplier = 1 - (self.get_defense() / 100)
+        actual_damage = max(1, amount * defense_multiplier)
+        self.health -= actual_damage
+        if self.health <= 0:
+            self.is_alive = False
+            self.death_triggered = True
+        print(f"Took {actual_damage} damage (reduced from {amount} by defense)")
+
+    def update_modifiers(self, inventory):
+        """Update character stats based on equipped items"""
+        # Reset to base stats first
+        self.current_stats = dict(self.base_stats)
+        
+        # Clear equipped items list
+        self.equipped_items = []
+        
+        # Check armor slots
+        for armor_slot in inventory.armor:
+            if armor_slot and armor_slot.get("item"):
+                item = armor_slot["item"]
+                if item not in self.equipped_items:
+                    self.equipped_items.append(item)
+        
+        # Check selected hotbar slot for weapon/tool
+        selected = inventory.get_selected_item()
+        if selected and selected.get("item"):
+            item = selected["item"]
+            if item.type in ["weapon", "tool"] and item not in self.equipped_items:
+                self.equipped_items.append(item)
+        
+        # Apply all modifiers from equipped items
+        for item in self.equipped_items:
+            if hasattr(item, "modifiers"):
+                for stat, value in item.modifiers.items():
+                    if stat in self.current_stats:
+                        self.current_stats[stat] += value
+        
+        # Update derived stats
+        self.speed = self.current_stats["movement_speed"]
+        self.health = min(self.health, self.current_stats["health"])  # Cap health at max
+        
+        print(f"Updated modifiers: {self.current_stats}")

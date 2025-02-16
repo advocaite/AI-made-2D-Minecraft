@@ -1,0 +1,79 @@
+{
+    "IRON_SWORD_SHARPNESS": {
+        "base_item": {
+            "item_id": 40,
+            "name": "Iron Sword"
+        },
+        "ingredients": [{
+            "item_id": 200,
+            "name": "Iron Ingot",
+            "quantity": 2
+        }],
+        "modifiers": {
+            "damage": 5,
+            "attack_speed": 0.2
+        },
+        "result_suffix": "of Sharpness"
+    },
+    "IRON_SWORD_FLAME": {
+        "base_item": {
+            "item_id": 40,
+            "name": "Iron Sword"
+        },
+        "ingredients": [{
+            "item_id": 202,
+            "name": "Coal",
+            "quantity": 5
+        }],
+        "modifiers": {
+            "damage": 3,
+            "attack_speed": 0.1
+        },
+        "result_suffix": "of Flame"
+    },
+    "IRON_CHESTPLATE_PROTECTION": {
+        "base_item": {
+            "item_id": 31,
+            "name": "Iron Chestplate"
+        },
+        "ingredients": [{
+            "item_id": 200,
+            "name": "Iron Ingot",
+            "quantity": 3
+        }],
+        "modifiers": {
+            "defense": 3,
+            "health": 10
+        },
+        "result_suffix": "of Protection"
+    },
+    "IRON_BOOTS_SPEED": {
+        "base_item": {
+            "item_id": 33,
+            "name": "Iron Boots"
+        },
+        "ingredients": [{
+            "item_id": 201,
+            "name": "Gold Ingot",
+            "quantity": 2
+        }],
+        "modifiers": {
+            "movement_speed": 0.3,
+            "defense": 1
+        },
+        "result_suffix": "of Swiftness"
+    },
+    "fire_sword": {
+        "base_item": {
+            "item_id": 40
+        },
+        "ingredients": [{
+            "item_id": 202,
+            "quantity": 1
+        }],
+        "modifiers": {
+            "damage": 5
+        },
+        "result_suffix": "of Fire"
+    }
+}

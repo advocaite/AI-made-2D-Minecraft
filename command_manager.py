@@ -1,4 +1,9 @@
 import config as c  # Add this import
+from block import ENHANCER  # Add this import
+from item import (  # Add these imports
+    IRON_HELMET, IRON_CHESTPLATE, IRON_LEGGINGS, IRON_BOOTS,
+    IRON_SWORD, IRON_PICKAXE, IRON_AXE, IRON_SHOVEL
+)
 
 class CommandManager:
     def __init__(self):
@@ -70,6 +75,9 @@ class CommandManager:
                     41: IRON_PICKAXE,
                     42: IRON_AXE,
                     43: IRON_SHOVEL,
+                    "ENHANCER": ENHANCER.item_variant,
+                    ENHANCER.id: ENHANCER.item_variant,  # Add by ID too
+                    50: ENHANCER.item_variant,  # Numerical ID access
                 }
 
                 if key in item_map:

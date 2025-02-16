@@ -66,6 +66,19 @@
             "is_block": true
         }
     },
+    "ENHANCER": {
+        "ingredients": [
+            { "item_id": 200, "quantity": 4, "name": "Iron Ingot" },
+            { "item_id": 19, "quantity": 2, "name": "Wood" }
+        ],
+        "result": {
+            "item_id": 50,
+            "name": "Enhancer",
+            "texture_coords": [17, 1],
+            "stack_size": 64,
+            "is_block": true
+        }
+    },
     "IRON_HELMET": {
         "ingredients": [
             { "item_id": 200, "quantity": 5 }

@@ -19,6 +19,7 @@ from mob import Mob  # new import for Mob class
 from death_menu import DeathMenu  # new import
 from storage_ui import StorageUI  # new import
 from furnace_ui import FurnaceUI  # new import
+from enhancer_ui import EnhancerUI  # Add this import
 
 class World:
     def __init__(self):
@@ -102,8 +103,10 @@ def main():
     # Load texture atlas
     texture_atlas = pygame.image.load("texture_atlas.png").convert()
     
-    # Create inventory instance:
+    # Create inventory instance and link to player
     player_inventory = inventory.Inventory()
+    player_inventory.set_player(player)
+    player.inventory = player_inventory  # Make sure player has reference to inventory
     
     # Create ActionModeController instance.
     action_mode_controller = ActionModeController(texture_atlas, player_inventory)
@@ -294,6 +297,9 @@ def main():
                         elif isinstance(block, b.FurnaceBlock):
                             furnace_ui = FurnaceUI(screen, player_inventory, block, texture_atlas)
                             furnace_ui.run()
+                        elif isinstance(block, b.EnhancerBlock):  # Add this section
+                            enhancer_ui = EnhancerUI(screen, player_inventory, texture_atlas)
+                            enhancer_ui.run()
             if event.type == pygame.KEYDOWN:
                 # New: Press "n" to cycle weather for testing instead of "w"
                 if event.key == pygame.K_n:
@@ -504,24 +510,33 @@ def main():
                             player_inventory.add_item(block.item_variant, 1)
                         print(f"Breaking block: {block.name}, drop_item: {block.drop_item}")
                 # Right click: process placement in action mode
-                if mouse_buttons[2] and not placed_water:
+                if mouse_buttons[2] and not placed_water:  # Right click
                     selected = player_inventory.get_selected_item()
-                    print(f"Selected item: {selected}")  # Debugging information
-                    if selected and isinstance(selected["item"], Item) and (selected["item"].is_block or selected["item"].name in ["Water Bottle", "Water"]):
-                        block_to_place = selected["item"].block if selected["item"].is_block else b.WATER
-                        block_world_rect = pygame.Rect(world_x * block_size, world_y * block_size, block_size, block_size)
-                        print(f"Attempting to place block: {block_to_place.name} at ({world_x}, {world_y})")  # Debugging
-                        if world_chunks[chunk_index][world_y][local_x] == b.AIR and not player.rect.colliderect(block_world_rect):
-                            # Check if we're placing a storage or furnace block and create a new instance
-                            if isinstance(block_to_place, (b.StorageBlock, b.FurnaceBlock)):
+                    if selected and selected.get("item"):
+                        item_obj = selected["item"]
+                        print(f"Selected item: {item_obj.name} (is_block: {item_obj.is_block})")
+                        
+                        if item_obj.is_block and hasattr(item_obj, "block"):
+                            block_to_place = item_obj.block
+                            if isinstance(block_to_place, (b.StorageBlock, b.FurnaceBlock, b.EnhancerBlock)):
                                 block_to_place = block_to_place.create_instance()
                             
-                            world_chunks[chunk_index][world_y][local_x] = block_to_place
-                            placed_water = True
-                            print(f"Block placed: {block_to_place.name} at ({world_x}, {world_y})")
-                            player_inventory.update_quantity(selected, -1)
+                            print(f"Attempting to place block: {block_to_place.name}")
+                            block_world_rect = pygame.Rect(world_x * block_size, world_y * block_size, block_size, block_size)
+                            print(f"Attempting to place block: {block_to_place.name} at ({world_x}, {world_y})")  # Debugging
+                            if world_chunks[chunk_index][world_y][local_x] == b.AIR and not player.rect.colliderect(block_world_rect):
+                                # Check if we're placing a storage or furnace block and create a new instance
+                                if isinstance(block_to_place, (b.StorageBlock, b.FurnaceBlock)):
+                                    block_to_place = block_to_place.create_instance()
+                                
+                                world_chunks[chunk_index][world_y][local_x] = block_to_place
+                                placed_water = True
+                                print(f"Block placed: {block_to_place.name} at ({world_x}, {world_y})")
+                                player_inventory.update_quantity(selected, -1)
+                            else:
+                                print(f"Cannot place block: {block_to_place.name} at ({world_x}, {world_y}) - Blocked or colliding")
                         else:
-                            print(f"Cannot place block: {block_to_place.name} at ({world_x}, {world_y}) - Blocked or colliding")
+                            print(f"Cannot place non-block item: {item_obj.name}")
         # Apply gravity and update vertical position
         player.rect.y += player_vy
         # Check both bottom-left and bottom-right corners for water
