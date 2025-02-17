@@ -10,6 +10,7 @@ from item import (  # Add item imports
     IRON_LEGGINGS, IRON_BOOTS, IRON_SWORD, IRON_PICKAXE,
     IRON_AXE, IRON_SHOVEL, COAL
 )
+from item import ITEM_REGISTRY  # Add this import at the top
 
 class SaveManager:
     def __init__(self, seed=None):
@@ -21,6 +22,10 @@ class SaveManager:
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
             
+        # Add file paths for world and player data
+        self.world_file = os.path.join(self.save_dir, "world.json")
+        self.player_file = os.path.join(self.save_dir, "player.json")
+        
         # Create item registry for loading
         self.item_registry = {
             # Block items will be added automatically from BLOCK_MAP
@@ -46,6 +51,24 @@ class SaveManager:
         for block_id, block in BLOCK_MAP.items():
             if hasattr(block, 'item_variant'):
                 self.item_registry[block_id] = block.item_variant
+
+    def load_world_chunk(self, chunk_data, block_map):
+        """Helper function to properly load chunk data"""
+        new_chunk = []
+        for row in chunk_data:
+            new_row = []
+            for block_id in row:
+                # If it's a dict, it's a special block that needs to be instantiated
+                if isinstance(block_id, dict):
+                    block_type = block_map[block_id['id']]
+                    block = block_type.create_instance()
+                    block.from_dict(block_id, self.item_registry)  # Now self is accessible
+                else:
+                    # For simple blocks, just reference them directly from block_map
+                    block = block_map[block_id]
+                new_row.append(block)
+            new_chunk.append(new_row)
+        return new_chunk
 
     def save_world(self, world_chunks):
         # Convert each chunk to a grid of block IDs for serialization.
@@ -251,9 +274,6 @@ class SaveManager:
     def load_all(self, block_map):
         try:
             world_file = os.path.join(self.save_dir, "world.json")
-            player_file = os.path.join(self.save_dir, "player.json")
-
-            world_chunks = {}
             if os.path.exists(world_file):
                 with open(world_file, "r") as f:
                     world_data = json.load(f)
@@ -262,52 +282,19 @@ class SaveManager:
                     if saved_seed != self.seed:
                         print(f"Warning: Loading world with seed {saved_seed}, but current seed is {self.seed}")
                     
-                    # Load chunks
+                    # Load chunks using the class method
+                    world_chunks = {}
                     for ci_str, chunk_data in world_data.get("chunks", {}).items():
                         ci = int(ci_str)
-                        chunk = []
-                        for row in chunk_data:
-                            new_row = []
-                            for block_data in row:
-                                if isinstance(block_data, dict):  # Special block
-                                    block_id = block_data["id"]
-                                    block = block_map[block_id].create_instance()
-                                    # Enhanced debugging for special blocks
-                                    print(f"Loading special block ID {block_id}: {block_data}")
-                                    print(f"Block type: {type(block)}")  # Add type debugging
-                                    block.from_dict(block_data, self.item_registry)
-                                    print(f"Block loaded: {block.name}")
-                                    # Additional debug for enhancer blocks
-                                    if isinstance(block, EnhancerBlock):
-                                        print(f"Enhancer slots after loading:")
-                                        print(f"Input: {block.input_slot}")
-                                        print(f"Ingredient: {block.ingredient_slot}")
-                                else:
-                                    block = block_map[block_data]
-                                new_row.append(block)
-                            chunk.append(new_row)
-                        world_chunks[ci] = chunk
+                        world_chunks[ci] = self.load_world_chunk(chunk_data, block_map)  # Use self.load_world_chunk
 
-            # Load player data
-            player_data = None
-            if os.path.exists(player_file):
-                with open(player_file, "r") as f:
-                    player_data = json.load(f)
-                    if "inventory" in player_data:
-                        # Convert serialized inventory data back to proper format
-                        player_data["inventory"]["hotbar"] = self._deserialize_inventory(
-                            player_data["inventory"]["hotbar"]
-                        )
-                        player_data["inventory"]["main"] = self._deserialize_inventory(
-                            player_data["inventory"]["main"]
-                        )
-                        player_data["inventory"]["armor"] = self._deserialize_inventory(
-                            player_data["inventory"]["armor"]
-                        )
+                    return world_chunks, self.load_player(self.item_registry)
 
-            return world_chunks, player_data
+            return None, None
         except Exception as e:
             print(f"Error loading save data: {e}")
+            import traceback
+            traceback.print_exc()
             return None, None
 
     def _deserialize_inventory(self, slots):

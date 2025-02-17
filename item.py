@@ -9,6 +9,7 @@ class Item:
         self.stack_size = stack_size
         self.is_block = is_block
         self.is_armor = False
+        self.is_seed = kwargs.get('is_seed', False)  # Add this line
         self.effective_against = kwargs.get('effective_against', [])
         self.consumable_type = kwargs.get('consumable_type', None)
         self.block = None
@@ -18,7 +19,7 @@ class Item:
         self.thirst_restore = kwargs.get('thirst_restore', 0)
         self.health_restore = kwargs.get('health_restore', 0)
         self.tint = None  # Added this for the get_texture method
-        self.type = None  # Add this line to store item type
+        self.type = kwargs.get('type', None)  # Changed to get from kwargs
 
         # Add stat modifiers
         self.modifiers = {
@@ -127,6 +128,22 @@ IRON_AXE.type = "tool"
 IRON_SHOVEL = Item(43, "Iron Shovel", (6, 4), stack_size=1)
 IRON_SHOVEL.type = "tool"
 
+# Example seed item with growth data
+WHEAT_SEED = Item(300, "Wheat Seeds", (21, 0), stack_size=64, is_seed=True)
+WHEAT_SEED.plant_data = {
+    'growth_stages': [0, 1, 2],  # 3 growth stages
+    'growth_time': 10000,  # 10 seconds per stage
+    'texture_coords': [(21, 0), (21, 3), (21, 6)],  # Different texture for each stage
+    'drops': [
+        [(WHEAT_SEED, 1)],  # Stage 0 drops: 1 seed
+        [(WHEAT_SEED, 1)],  # Stage 1 drops: 1 seed
+        [(WHEAT_SEED, 2), (Item(301, "Wheat", (20, 7), stack_size=64), 1)]  # Final stage: 2 seeds + 1 wheat
+    ]
+}
+
+# Example farming tool
+HOE_ITEM = Item(302, "Hoe", (21, 0), stack_size=1, type="hoe")
+
 # Update tooltip function to show modifiers
 def get_item_tooltip(item):
     if not item:
@@ -152,3 +169,18 @@ def get_item_tooltip(item):
         lines.append("Placeable block")
         
     return '\n'.join(lines)
+
+# Add to bottom of file, after all other definitions:
+ITEM_REGISTRY = {
+    # Add all existing items
+    100: ITEM_PICKAXE,
+    101: ITEM_AXE,
+    102: ITEM_SHOVEL,
+    103: ITEM_SWORD,
+    200: IRON_INGOT,
+    201: GOLD_INGOT,
+    202: COAL,
+    # Add farming items
+    300: WHEAT_SEED,
+    302: HOE_ITEM,
+}

@@ -16,6 +16,54 @@ class Block:
         self.item_variant = None  # New: will hold the corresponding item
         self.entity_type = entity_type  # New: entity type to spawn
 
+    def create_instance(self):
+        """Base method to create a new instance of the block"""
+        # Special case for AIR block - always return the same instance
+        if self == AIR:
+            return AIR
+            
+        # For normal blocks, create a new instance with all properties
+        new_block = type(self)(
+            id=self.id,
+            name=self.name, 
+            solid=self.solid,
+            color=self.color,
+            texture_coords=self.texture_coords,
+            animation_frames=self.animation_frames,
+            frame_duration=self.frame_duration,
+            tint=self.tint,  # Added tint
+            entity_type=self.entity_type
+        )
+        
+        # Copy additional properties
+        if hasattr(self, 'drop_item'):
+            new_block.drop_item = self.drop_item
+        if hasattr(self, 'item_variant'):
+            new_block.item_variant = self.item_variant
+            
+        return new_block
+
+    def to_dict(self):
+        """Base serialization method for blocks"""
+        data = {
+            'id': self.id,
+            'name': self.name,
+            'texture_coords': self.texture_coords,
+            'solid': self.solid
+        }
+        # Add tint if present
+        if self.tint:
+            data['tint'] = self.tint
+        return data
+
+    def from_dict(self, data, item_registry):
+        """Base deserialization method for blocks"""
+        self.id = data.get('id', self.id)
+        self.name = data.get('name', self.name)
+        self.texture_coords = data.get('texture_coords', self.texture_coords)
+        self.solid = data.get('solid', self.solid)
+        self.tint = data.get('tint', self.tint)  # Restore tint
+
     # NEW: Helper method to get the block texture with tint applied if set.
     def get_texture(self, atlas):
         # Cache the base image extracted from the atlas.
@@ -325,6 +373,154 @@ class EnhancerBlock(Block):
 
         print(f"Loaded enhancer state: input={self.input_slot}, ingredient={self.ingredient_slot}")
 
+class FarmingBlock(Block):
+    def __init__(self, id, name, texture_coords):
+        super().__init__(id, name, True, (139, 69, 19), texture_coords)
+        self.plantable = True
+        self.plant = None
+        self.tilled = False
+        self.untilled_texture = texture_coords  # Store original texture
+        self.tilled_texture = (13, 1)  # Tilled soil texture
+
+    def create_instance(self):
+        new_block = FarmingBlock(self.id, self.name, self.texture_coords)
+        new_block.item_variant = self.item_variant
+        new_block.drop_item = self.drop_item
+        return new_block
+
+    def plant_seed(self, seed_item):
+        """Plant a seed if conditions are met"""
+        if self.tilled and not self.plant and seed_item.is_seed:
+            print(f"Planting seed: {seed_item.name}")
+            self.plant = Plant(seed_item.plant_data)
+            # Set initial texture to first growth stage
+            self.texture_coords = seed_item.plant_data['texture_coords'][0]
+            return True
+        return False
+
+    def till(self):
+        """Till the soil with a hoe"""
+        self.tilled = True
+        self.texture_coords = self.tilled_texture  # Update texture immediately
+        print(f"Tilled soil! New texture: {self.texture_coords}")
+
+    def update(self, dt):
+        """Only update plant if it's still growing"""
+        if self.plant:
+            needs_update = self.plant.update(dt)
+            if needs_update:
+                # Update texture coords for growing plants
+                self.texture_coords = self.plant.get_texture_coords()
+                print(f"Plant still growing at stage {self.plant.current_stage}")
+
+    def harvest(self, tool=None):
+        """Harvest plant and return drops based on growth stage"""
+        if not self.plant:
+            return None
+            
+        drops = self.plant.get_drops(tool)
+        self.plant = None
+        return drops
+
+    def to_dict(self):
+        """Serialize farming block data for saving"""
+        data = super().to_dict()  # Now this will work
+        data.update({
+            'tilled': self.tilled,
+            'plant': None,
+            'is_block': True,  # Add this to ensure block property is saved
+            'texture_coords': self.texture_coords
+        })
+        if self.plant:
+            data['plant'] = {
+                'plant_data': self.plant.plant_data,
+                'current_stage': self.plant.current_stage,
+                'time_in_stage': self.plant.time_in_stage
+            }
+        return data
+
+    def from_dict(self, data, item_registry):
+        """Deserialize farming block data when loading"""
+        super().from_dict(data, item_registry)  # Load base block data first
+        self.tilled = data.get('tilled', False)
+        self.is_block = data.get('is_block', True)  # Restore block property
+        if data.get('plant'):
+            plant_data = data['plant']
+            self.plant = Plant(plant_data['plant_data'])
+            self.plant.current_stage = plant_data['current_stage']
+            self.plant.time_in_stage = plant_data['time_in_stage']
+
+    def get_texture(self, atlas):
+        """Override get_texture to show both tilled soil and plant if present"""
+        # Get base farmland texture (tilled or untilled)
+        block_size = c.BLOCK_SIZE
+        tx, ty = self.texture_coords
+        texture_rect = pygame.Rect(tx * block_size, ty * block_size, block_size, block_size)
+        base_texture = atlas.subsurface(texture_rect).convert_alpha()
+
+        # If there's a plant, draw it on top
+        if self.plant:
+            plant_tx, plant_ty = self.plant.get_texture_coords()
+            plant_rect = pygame.Rect(plant_tx * block_size, plant_ty * block_size, block_size, block_size)
+            plant_texture = atlas.subsurface(plant_rect).convert_alpha()
+            
+            # Create a new surface combining soil and plant
+            combined = base_texture.copy()
+            combined.blit(plant_texture, (0, 0))
+            return combined
+            
+        return base_texture
+
+class Plant:
+    def __init__(self, plant_data):
+        self.growth_stages = plant_data['growth_stages']
+        self.current_stage = 0
+        self.growth_time = plant_data['growth_time']
+        self.time_in_stage = 0
+        self.drops = plant_data['drops']
+        self.texture_coords = plant_data['texture_coords']
+        self.solid = False  # Make plants non-collidable
+        # Debugging output
+        print(f"Plant initialized with texture coords: {self.texture_coords}")
+        print(f"Growth stages: {self.growth_stages}")
+        print(f"Current stage: {self.current_stage}")
+
+    def update(self, dt):
+        # Skip update if plant is fully grown
+        if self.current_stage >= len(self.growth_stages) - 1:
+            return False  # Return False to indicate no more updates needed
+
+        self.time_in_stage += dt
+        if self.time_in_stage >= self.growth_time:
+            self.current_stage += 1
+            self.time_in_stage = 0
+            # Debug growth stage change
+            print(f"Plant grew to stage {self.current_stage}, texture: {self.texture_coords[self.current_stage]}")
+        return True  # Return True to indicate plant is still growing
+
+    def get_drops(self, tool=None):
+        stage_drops = self.drops[self.current_stage]
+        if tool and tool.type == "hoe":
+            # Instead of multiplying by 1.5, add +1 to quantity for using proper tool
+            return [(item, qty + 1) for item, qty in stage_drops]
+        return stage_drops
+
+    def get_texture_coords(self):
+        return self.texture_coords[self.current_stage]
+
+    def to_dict(self):
+        return {
+            'current_stage': self.current_stage,
+            'time_in_stage': self.time_in_stage
+        }
+
+    @staticmethod
+    def from_dict(data):
+        plant = Plant(data['plant_data'])
+        plant.current_stage = data['current_stage']
+        plant.time_in_stage = data['time_in_stage']
+        return plant
+
 # Define standard blocks
 AIR = Block(0, "Air", False, (255, 255, 255), (0, 0))
 GRASS = Block(1, "Grass", True, (34, 139, 34), (1, 10))
@@ -374,6 +570,7 @@ WOOD.drop_item = wood_item
 STORAGE = StorageBlock(23, "Storage", (15, 1))  # Adjust texture coordinates as needed
 FURNACE = FurnaceBlock(24, "Furnace", (16, 1))  # Adjust texture coordinates as needed
 ENHANCER = EnhancerBlock(50, "Enhancer", (17, 1))
+FARMLAND = FarmingBlock(25, "Farmland", (13, 0))  # Untilled texture
 
 # Create item variants for other blocks
 for blk in (GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE, LEAVES, LEAVESGG, SPAWNER):
@@ -418,6 +615,11 @@ enhancer_item.block = ENHANCER
 ENHANCER.item_variant = enhancer_item
 ENHANCER.drop_item = enhancer_item
 
+farmland_item = Item(25, "Farmland", FARMLAND.texture_coords, stack_size=64, is_block=True)
+farmland_item.block = FARMLAND
+FARMLAND.item_variant = farmland_item
+FARMLAND.drop_item = farmland_item
+
 # Ensure SPAWNER_ITEM is defined
 SPAWNER_ITEM = SPAWNER.item_variant
 
@@ -439,5 +641,6 @@ BLOCK_MAP = {
     22: SPAWNER,  # NEW: Spawner block added
     23: STORAGE,  # NEW: Storage block added
     24: FURNACE,  # NEW: Furnace block added
+    25: FARMLAND,  # NEW: Farmland block added
     50: ENHANCER  # Make sure this is included
 }
