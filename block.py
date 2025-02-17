@@ -586,8 +586,16 @@ FURNACE = FurnaceBlock(24, "Furnace", (16, 1))  # Adjust texture coordinates as 
 ENHANCER = EnhancerBlock(50, "Enhancer", (17, 1))
 FARMLAND = FarmingBlock(25, "Farmland", (13, 0))  # Untilled texture
 
+# Add new biome blocks
+SAND = Block(30, "Sand", True, (194, 178, 128), (18, 5))
+SANDSTONE = Block(31, "Sandstone", True, (219, 211, 160), (18, 6))
+SNOW_GRASS = Block(32, "Snowy Grass", True, (200, 200, 200), (3, 10), tint=(200, 200, 200))
+SNOW_DIRT = Block(33, "Frozen Dirt", True, (150, 150, 150), (8, 5), tint=(200, 200, 200))
+SAVANNA_GRASS = Block(34, "Savanna Grass", True, (169, 178, 37), (8, 6), tint=(169, 178, 37))
+SAVANNA_DIRT = Block(35, "Savanna Dirt", True, (130, 100, 60), (8, 5), tint=(169, 178, 37))
+
 # Create item variants for other blocks
-for blk in (GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE, LEAVES, LEAVESGG, SPAWNER):
+for blk in (GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE, LEAVES, LEAVESGG, SPAWNER, SAND, SANDSTONE, SNOW_GRASS, SNOW_DIRT, SAVANNA_GRASS, SAVANNA_DIRT):
     item_variant = Item(blk.id, blk.name, blk.texture_coords, stack_size=64, is_block=True)
     item_variant.block = blk
     blk.item_variant = item_variant
@@ -656,5 +664,11 @@ BLOCK_MAP = {
     23: STORAGE,  # NEW: Storage block added
     24: FURNACE,  # NEW: Furnace block added
     25: FARMLAND,  # NEW: Farmland block added
+    30: SAND,  # NEW: Sand block added
+    31: SANDSTONE,  # NEW: Sandstone block added
+    32: SNOW_GRASS,  # NEW: Snowy Grass block added
+    33: SNOW_DIRT,  # NEW: Frozen Dirt block added
+    34: SAVANNA_GRASS,  # NEW: Savanna Grass block added
+    35: SAVANNA_DIRT,  # NEW: Savanna Dirt block added
     50: ENHANCER  # Make sure this is included
 }
