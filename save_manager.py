@@ -3,54 +3,40 @@ import os
 import time
 from block import (
     BLOCK_MAP, ENHANCER,
-    StorageBlock, FurnaceBlock, EnhancerBlock  # Add direct imports for block types
+    StorageBlock, FurnaceBlock, EnhancerBlock
 )
-from item import (  # Add item imports
-    IRON_INGOT, GOLD_INGOT, IRON_HELMET, IRON_CHESTPLATE,
-    IRON_LEGGINGS, IRON_BOOTS, IRON_SWORD, IRON_PICKAXE,
-    IRON_AXE, IRON_SHOVEL, COAL
-)
-from item import ITEM_REGISTRY  # Add this import at the top
+from item import ITEM_REGISTRY  # Just import ITEM_REGISTRY directly
 
 class SaveManager:
     def __init__(self, seed=None):
         self.seed = seed
         self.save_dir = "saves"
-        # Create a seed-specific directory
         if self.seed is not None:
             self.save_dir = os.path.join("saves", f"world_{self.seed}")
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
             
-        # Add file paths for world and player data
         self.world_file = os.path.join(self.save_dir, "world.json")
         self.player_file = os.path.join(self.save_dir, "player.json")
         
-        # Create item registry for loading
-        self.item_registry = {
-            # Block items will be added automatically from BLOCK_MAP
-            # Add crafted/smelted items
-            200: IRON_INGOT,
-            201: GOLD_INGOT,
-            202: COAL,
-            # Add tools and armor
-            30: IRON_HELMET,
-            31: IRON_CHESTPLATE,
-            32: IRON_LEGGINGS,
-            33: IRON_BOOTS,
-            40: IRON_SWORD,
-            41: IRON_PICKAXE,
-            42: IRON_AXE,
-            43: IRON_SHOVEL,
-            # Add enhancer by ID and name
-            25: ENHANCER.item_variant,
-            "ENHANCER": ENHANCER.item_variant,
-        }
+        # Use ITEM_REGISTRY directly and add block variants
+        self.item_registry = {}  # Start with empty registry
         
-        # Add block item variants to registry
+        # Add valid items from ITEM_REGISTRY
+        for item_id, item in ITEM_REGISTRY.items():
+            if item is not None:  # Only add non-None items
+                self.item_registry[item_id] = item
+        
+        # Add block item variants
         for block_id, block in BLOCK_MAP.items():
-            if hasattr(block, 'item_variant'):
+            if hasattr(block, 'item_variant') and block.item_variant is not None:
                 self.item_registry[block_id] = block.item_variant
+
+        # Add debug output
+        print("Initialized item registry with:")
+        for item_id, item in self.item_registry.items():
+            if item:  # Double-check item is not None
+                print(f"ID: {item_id}, Item: {item.name}")
 
     def load_world_chunk(self, chunk_data, block_map):
         """Helper function to properly load chunk data"""
@@ -190,63 +176,134 @@ class SaveManager:
         return None
 
     def save_all(self, world_chunks, player, inventory):
-        # Create seed-specific metadata
-        metadata = {
-            "seed": self.seed,
-            "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
-        }
-
-        # Prepare world data with metadata
+        """Save both world and player data"""
+        # Create save data structure
         world_data = {
-            "metadata": metadata,
-            "chunks": {}
-        }
-
-        # Add chunks to world data with proper block serialization
-        for ci, chunk in world_chunks.items():
-            chunk_data = []
-            for row in chunk:
-                row_data = []
-                for block in row:
-                    if hasattr(block, 'to_dict'):  # Special blocks like Storage/Furnace/Enhancer
-                        block_dict = block.to_dict()
-                        # Ensure block maintains its ID in serialization
-                        if not "id" in block_dict:
-                            block_dict["id"] = block.id
-                        row_data.append(block_dict)
-                    else:
-                        row_data.append(block.id)
-                chunk_data.append(row_data)
-            world_data["chunks"][str(ci)] = chunk_data
-
-        # Save player data with the same metadata
-        player_data = {
-            "metadata": metadata,
-            "player": {
-                "x": player.rect.x,
-                "y": player.rect.y,
-                "health": player.health,
-                "hunger": player.hunger,
-                "thirst": player.thirst
+            'metadata': {
+                'seed': self.seed,
+                'created_at': time.strftime("%Y-%m-%d %H:%M:%S")
             },
-            "inventory": {
-                "hotbar": self._serialize_inventory(inventory.hotbar),
-                "main": self._serialize_inventory(inventory.main),
-                "armor": self._serialize_inventory(inventory.armor),
-                "selected_hotbar_index": inventory.selected_hotbar_index
-            }
+            'chunks': self.serialize_world(world_chunks)
         }
 
-        # Save to seed-specific files
-        world_file = os.path.join(self.save_dir, "world.json")
-        player_file = os.path.join(self.save_dir, "player.json")
+        player_data = {
+            'metadata': {
+                'seed': self.seed,
+                'created_at': time.strftime("%Y-%m-%d %H:%M:%S")
+            },
+            'player': {
+                'x': player.rect.x,
+                'y': player.rect.y,
+                'health': player.health,
+                'hunger': player.hunger,
+                'thirst': player.thirst
+            },
+            'inventory': self.serialize_inventory(inventory)
+        }
+
+        # Save to files with consistent naming
+        world_file = os.path.join(self.save_dir, f'world_{self.seed}.json')
+        player_file = os.path.join(self.save_dir, f'player_{self.seed}.json')
         
-        with open(world_file, "w") as f:
+        with open(world_file, 'w') as f:
             json.dump(world_data, f)
-        with open(player_file, "w") as f:
+        with open(player_file, 'w') as f:
             json.dump(player_data, f)
-        
-        print(f"Saved world with seed {self.seed} to {self.save_dir}")
+            
+        print(f"Saved world to {world_file}")
+        print(f"Saved player data to {player_file}")
+
+    def serialize_inventory(self, inventory):
+        """Convert inventory to serializable format"""
+        def serialize_slot(slot):
+            # Return explicit None if slot is empty
+            if not slot or not slot.get('item'):
+                return {
+                    'item_id': 0,
+                    'quantity': 0,
+                    'is_empty': True
+                }
+            
+            item = slot['item']
+            # Create base item data
+            item_data = {
+                'item_id': item.id,
+                'quantity': slot['quantity'],
+                'name': item.name,
+                'is_block': getattr(item, 'is_block', False),
+                'texture_coords': item.texture_coords,
+                'type': getattr(item, 'type', None),
+                'stack_size': getattr(item, 'stack_size', 64),
+                'is_empty': False
+            }
+            
+            # Add special properties
+            if hasattr(item, 'modifiers'):
+                item_data['modifiers'] = item.modifiers
+            if hasattr(item, 'enhanced_suffix'):
+                item_data['enhanced_suffix'] = item.enhanced_suffix
+            if hasattr(item, 'burn_time'):
+                item_data['burn_time'] = item.burn_time
+
+            return item_data
+
+        return {
+            'hotbar': [serialize_slot(slot) for slot in inventory.hotbar],
+            'armor': [serialize_slot(slot) for slot in inventory.armor],
+            'main': [serialize_slot(slot) for slot in inventory.main],
+            'selected_hotbar_index': inventory.selected_hotbar_index
+        }
+
+    def deserialize_inventory(self, inv_data):
+        """Convert saved inventory data back to inventory format"""
+        def deserialize_slot(slot_data):
+            # Always return a valid slot dictionary
+            if not slot_data or slot_data.get('is_empty', True):
+                return {"item": None, "quantity": 0}
+
+            item_id = slot_data['item_id']
+            if item_id in self.item_registry:
+                base_item = self.item_registry[item_id]
+                
+                # Create new instance
+                new_item = type(base_item)(
+                    id=item_id,
+                    name=slot_data['name'],
+                    texture_coords=slot_data['texture_coords'],
+                    stack_size=slot_data.get('stack_size', 64),
+                    is_block=slot_data.get('is_block', False)
+                )
+
+                # Restore special properties
+                if 'modifiers' in slot_data:
+                    new_item.modifiers = slot_data['modifiers']
+                if 'enhanced_suffix' in slot_data:
+                    new_item.enhanced_suffix = slot_data['enhanced_suffix']
+                    if slot_data['enhanced_suffix']:
+                        new_item.name = f"{new_item.name} {new_item.enhanced_suffix}"
+                if 'burn_time' in slot_data:
+                    new_item.burn_time = slot_data['burn_time']
+                if 'type' in slot_data and slot_data['type']:
+                    new_item.type = slot_data['type']
+
+                # Important: For block items, make sure to set the block reference
+                if slot_data.get('is_block') and hasattr(base_item, 'block'):
+                    new_item.block = base_item.block
+                    
+                return {
+                    "item": new_item,
+                    "quantity": slot_data['quantity']
+                }
+            print(f"Warning: Unknown item ID {item_id}")
+            return {"item": None, "quantity": 0}
+
+        # Make sure we preserve all slots, even empty ones
+        return {
+            'hotbar': [deserialize_slot(slot) for slot in inv_data['hotbar']],
+            'armor': [deserialize_slot(slot) for slot in inv_data['armor']],
+            'main': [deserialize_slot(slot) for slot in inv_data['main']],
+            'selected_hotbar_index': inv_data['selected_hotbar_index']
+        }
 
     def _serialize_inventory(self, slots):
         """Convert inventory slots to serializable format"""
@@ -270,32 +327,6 @@ class SaveManager:
             else:
                 serialized.append(None)
         return serialized
-
-    def load_all(self, block_map):
-        try:
-            world_file = os.path.join(self.save_dir, "world.json")
-            if os.path.exists(world_file):
-                with open(world_file, "r") as f:
-                    world_data = json.load(f)
-                    # Verify seed matches
-                    saved_seed = world_data.get("metadata", {}).get("seed")
-                    if saved_seed != self.seed:
-                        print(f"Warning: Loading world with seed {saved_seed}, but current seed is {self.seed}")
-                    
-                    # Load chunks using the class method
-                    world_chunks = {}
-                    for ci_str, chunk_data in world_data.get("chunks", {}).items():
-                        ci = int(ci_str)
-                        world_chunks[ci] = self.load_world_chunk(chunk_data, block_map)  # Use self.load_world_chunk
-
-                    return world_chunks, self.load_player(self.item_registry)
-
-            return None, None
-        except Exception as e:
-            print(f"Error loading save data: {e}")
-            import traceback
-            traceback.print_exc()
-            return None, None
 
     def _deserialize_inventory(self, slots):
         """Convert serialized inventory data back to proper format"""
@@ -326,3 +357,85 @@ class SaveManager:
                     print(f"Warning: Unknown item ID {item_id}")
                     deserialized.append(None)
         return deserialized
+
+    def serialize_world(self, world_chunks):
+        """Convert world chunks to serializable format"""
+        serialized = {}
+        for ci, chunk in world_chunks.items():
+            chunk_data = []
+            for row in chunk:
+                row_data = []
+                for block in row:
+                    if isinstance(block, (StorageBlock, FurnaceBlock, EnhancerBlock)):
+                        # Special blocks need their state saved
+                        block_data = block.to_dict()
+                        row_data.append(block_data)
+                    else:
+                        # Regular blocks just save their ID
+                        row_data.append(block.id)
+                chunk_data.append(row_data)
+            serialized[str(ci)] = chunk_data
+        return serialized
+
+    def deserialize_world(self, world_data, block_map):
+        """Convert serialized world data back to chunks"""
+        deserialized = {}
+        for ci_str, chunk_data in world_data.items():
+            ci = int(ci_str)
+            chunk = []
+            for row in chunk_data:
+                new_row = []
+                for block_data in row:
+                    if isinstance(block_data, dict):
+                        # Special block with saved state
+                        block_id = block_data['id']
+                        block = block_map[block_id].create_instance()
+                        block.from_dict(block_data, self.item_registry)
+                        new_row.append(block)
+                    else:
+                        # Regular block
+                        new_row.append(block_map[block_data])
+                chunk.append(new_row)
+            deserialized[ci] = chunk
+        return deserialized
+
+    def load_all(self, block_map):
+        """Load both world and player data"""
+        try:
+            world_file = os.path.join(self.save_dir, f'world_{self.seed}.json')
+            player_file = os.path.join(self.save_dir, f'player_{self.seed}.json')
+            
+            if not os.path.exists(world_file) or not os.path.exists(player_file):
+                print(f"Save files not found: {world_file} or {player_file}")
+                return None, None
+
+            print(f"Loading world from {world_file}")
+            with open(world_file, 'r') as f:
+                world_data = json.load(f)
+
+            print(f"Loading player from {player_file}")
+            with open(player_file, 'r') as f:
+                player_data = json.load(f)
+
+            # Verify seeds match
+            world_seed = world_data.get('metadata', {}).get('seed')
+            player_seed = player_data.get('metadata', {}).get('seed')
+            
+            if world_seed != self.seed or player_seed != self.seed:
+                print(f"Warning: Seed mismatch. World: {world_seed}, Player: {player_seed}, Current: {self.seed}")
+
+            # Get chunks from world data
+            world_chunks = self.deserialize_world(world_data['chunks'], block_map)
+            
+            # Get inventory from player data
+            if 'inventory' in player_data:
+                player_data['inventory'] = self.deserialize_inventory(player_data['inventory'])
+            
+            print("World and player data loaded successfully")
+            return world_chunks, player_data
+            
+        except Exception as e:
+            print(f"Error loading save data: {e}")
+            import traceback
+            traceback.print_exc()
+            return None, None

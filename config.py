@@ -14,7 +14,7 @@ GRAVITY = 0.5
 JUMP_SPEED = 10  # changed: positive jump speed constant
 
 # New: Day and Night cycle constants in milliseconds
-DAY_DURATION = 18000  # 30 minutes of day
+DAY_DURATION = 180000  # 30 minutes of day
 NIGHT_DURATION = 90000  # 15 minutes of night
 TOTAL_CYCLE = DAY_DURATION + NIGHT_DURATION
 

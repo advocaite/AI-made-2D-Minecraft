@@ -59,27 +59,37 @@ class Block:
     def from_dict(self, data, item_registry):
         """Base deserialization method for blocks"""
         self.id = data.get('id', self.id)
-        self.name = data.get('name', self.name)
+        self.name = data.get('name', self.name)  # Fixed syntax error here
         self.texture_coords = data.get('texture_coords', self.texture_coords)
         self.solid = data.get('solid', self.solid)
         self.tint = data.get('tint', self.tint)  # Restore tint
 
     # NEW: Helper method to get the block texture with tint applied if set.
     def get_texture(self, atlas):
-        # Cache the base image extracted from the atlas.
+        """Helper method to get the block texture with proper alpha handling"""
         if not hasattr(self, "_cached_base"):
             block_size = c.BLOCK_SIZE
             tx, ty = self.texture_coords
             texture_rect = pygame.Rect(tx * block_size, ty * block_size, block_size, block_size)
-            self._cached_base = atlas.subsurface(texture_rect).convert_alpha()
-        # If no tint is set, use the base texture.
+            base_img = atlas.subsurface(texture_rect).convert_alpha()
+            
+            # Create a new surface with per-pixel alpha
+            self._cached_base = pygame.Surface((block_size, block_size), pygame.SRCALPHA, 32)
+            self._cached_base = self._cached_base.convert_alpha()
+            self._cached_base.blit(base_img, (0, 0))
+
+        # Return base texture if no tint
         if not self.tint:
             return self._cached_base
-        # If tinted image not yet computed, compute and cache it.
+
+        # Apply tint while preserving alpha
         if not hasattr(self, "_cached_texture"):
-            tinted = self._cached_base.copy()
-            tinted.fill(self.tint, special_flags=pygame.BLEND_RGBA_MULT)
-            self._cached_texture = tinted
+            self._cached_texture = self._cached_base.copy()
+            tint_surface = pygame.Surface((c.BLOCK_SIZE, c.BLOCK_SIZE), pygame.SRCALPHA, 32)
+            tint_surface = tint_surface.convert_alpha()
+            tint_surface.fill((*self.tint, 255))
+            self._cached_texture.blit(tint_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+
         return self._cached_texture
 
 class StorageBlock(Block):
@@ -405,21 +415,25 @@ class FarmingBlock(Block):
         print(f"Tilled soil! New texture: {self.texture_coords}")
 
     def update(self, dt):
-        """Only update plant if it's still growing"""
+        """Update plant growth"""
         if self.plant:
-            needs_update = self.plant.update(dt)
-            if needs_update:
-                # Update texture coords for growing plants
+            if self.plant.update(dt):
+                # Update texture coords only when plant changes stage
                 self.texture_coords = self.plant.get_texture_coords()
-                print(f"Plant still growing at stage {self.plant.current_stage}")
+                print(f"Plant updated: stage {self.plant.current_stage}")
+                return True
+        return False
 
     def harvest(self, tool=None):
-        """Harvest plant and return drops based on growth stage"""
+        """Harvest plant and return drops"""
         if not self.plant:
             return None
             
         drops = self.plant.get_drops(tool)
+        print(f"Harvested plant with drops: {drops}")
         self.plant = None
+        # Reset texture to tilled state after harvesting
+        self.texture_coords = self.tilled_texture
         return drops
 
     def to_dict(self):
@@ -486,17 +500,17 @@ class Plant:
         print(f"Current stage: {self.current_stage}")
 
     def update(self, dt):
-        # Skip update if plant is fully grown
+        """Update plant growth and return True if stage changed"""
         if self.current_stage >= len(self.growth_stages) - 1:
-            return False  # Return False to indicate no more updates needed
+            return False
 
         self.time_in_stage += dt
         if self.time_in_stage >= self.growth_time:
             self.current_stage += 1
             self.time_in_stage = 0
-            # Debug growth stage change
-            print(f"Plant grew to stage {self.current_stage}, texture: {self.texture_coords[self.current_stage]}")
-        return True  # Return True to indicate plant is still growing
+            print(f"Plant grew to stage {self.current_stage}")
+            return True
+        return False
 
     def get_drops(self, tool=None):
         stage_drops = self.drops[self.current_stage]

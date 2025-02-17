@@ -9,7 +9,7 @@ from character import Character  # new import
 from save_manager import SaveManager
 import inventory
 import inventory_ui
-from item import Item, ITEM_PICKAXE, ITEM_SWORD, ITEM_AXE, APPLE, WATER_BOTTLE  # Ensure Item and example items are imported
+from item import Item, IRON_PICKAXE, IRON_SWORD, IRON_AXE, APPLE, WATER_BOTTLE  # Fixed item names
 from world_item import WorldItem  # new import for WorldItem class
 from crafting_ui import CraftingUI  # new import
 from action_mode_controller import ActionModeController  # new import
@@ -100,8 +100,9 @@ def main():
     placed_water = False
     broken_block = False
 
-    # Load texture atlas
-    texture_atlas = pygame.image.load("texture_atlas.png").convert()
+    # Load and convert texture atlas with proper alpha
+    texture_atlas = pygame.image.load("texture_atlas.png").convert_alpha()
+    texture_atlas = texture_atlas.convert_alpha()  # Second convert to ensure proper alpha
     
     # Create inventory instance and link to player
     player_inventory = inventory.Inventory()
@@ -290,6 +291,26 @@ def main():
                     
                     if chunk_index in world_chunks and 0 <= world_y < world_height:
                         block = world_chunks[chunk_index][world_y][local_x]
+                        selected = player_inventory.get_selected_item()
+                        
+                        # Check if block is FarmingBlock and player has hoe selected
+                        if isinstance(block, b.FarmingBlock) and selected and selected.get("item"):
+                            item = selected["item"]
+                            print(f"DEBUG: Selected item type: {item.type}")  # Add debug output
+                            
+                            # Check specifically for hoe type
+                            if item.type == "hoe" and not block.tilled:
+                                block.till()
+                                print(f"Tilled soil at ({world_x}, {world_y})")
+                                continue
+                            # Handle seed planting separately
+                            elif hasattr(item, 'is_seed') and item.is_seed and block.tilled:
+                                if block.plant_seed(item):
+                                    player_inventory.update_quantity(selected, -1)
+                                    print(f"Planted {item.name}")
+                                    continue
+
+                        # Handle other block interactions...
                         if isinstance(block, b.StorageBlock):
                             # Open storage UI
                             storage_ui = StorageUI(screen, player_inventory, block, texture_atlas)
@@ -354,35 +375,27 @@ def main():
                         player.hunger = pdata.get("hunger", player.hunger)
                         player.thirst = pdata.get("thirst", player.thirst)
                         inv = loaded_player.get("inventory", {})
-                        player_inventory.hotbar = inv.get("hotbar", player_inventory.hotbar)
-                        player_inventory.armor = inv.get("armor", player_inventory.armor)
-                        player_inventory.main = inv.get("main", player_inventory.main)
-                        player_inventory.selected_hotbar_index = inv.get("selected_hotbar_index", player_inventory.selected_hotbar_index)
-                        # Ensure hotbar items are Item objects
-                        for slot in player_inventory.hotbar:
-                            if slot and isinstance(slot["item"], b.Block):
-                                slot["item"] = slot["item"].item_variant
-                        # Refill hotbar if empty.
-                        if not player_inventory.hotbar:
+                        
+                        # Carefully update inventory slots
+                        if "hotbar" in inv:
+                            player_inventory.hotbar = inv["hotbar"]
+                            # Ensure valid slots
+                            for i, slot in enumerate(player_inventory.hotbar):
+                                if not isinstance(slot, dict) or "item" not in slot:
+                                    player_inventory.hotbar[i] = {"item": None, "quantity": 0}
+                                elif slot and slot["item"] and isinstance(slot["item"], b.Block):
+                                    player_inventory.hotbar[i]["item"] = slot["item"].item_variant
+                        
+                        if "armor" in inv:
+                            player_inventory.armor = inv["armor"]
+                        if "main" in inv:
+                            player_inventory.main = inv["main"]
+                        if "selected_hotbar_index" in inv:
+                            player_inventory.selected_hotbar_index = inv["selected_hotbar_index"]
+
+                        # Only refill if hotbar is completely empty
+                        if not any(slot and slot.get("item") for slot in player_inventory.hotbar):
                             player_inventory.refill_hotbar()
-                        print("Hotbar after loading:")
-                        for idx, slot in enumerate(player_inventory.hotbar):
-                            if slot and "item" in slot and slot["item"]:
-                                print(f"Slot {idx}: Item: {slot['item'].name}, Quantity: {slot['quantity']}")
-                            else:
-                                print(f"Slot {idx}: Empty slot")
-                        print("Armor after loading:")
-                        for idx, slot in enumerate(player_inventory.armor):
-                            if slot and "item" in slot and slot["item"]:
-                                print(f"Slot {idx}: Item: {slot['item'].name}, Quantity: {slot['quantity']}")
-                            else:
-                                print(f"Slot {idx}: Empty slot")
-                        print("Main inventory after loading:")
-                        for idx, slot in enumerate(player_inventory.main):
-                            if slot and "item" in slot and slot["item"]:
-                                print(f"Slot {idx}: Item: {slot['item'].name}, Quantity: {slot['quantity']}")
-                            else:
-                                print(f"Slot {idx}: Empty slot")
                 if event.key == pygame.K_i:
                     # Open full inventory UI when 'i' is pressed.
                     inv_ui = inventory_ui.InventoryUI(screen, player_inventory, texture_atlas)
@@ -629,52 +642,60 @@ def main():
             distance_from_player = abs(current_chunk - ci)
             if distance_from_player < 2 or update_frame_count % 15 == 0:
                 chunk = world_chunks[ci]
+                # First pass: Check for downward flow
                 for y in range(world_height - 2, -1, -1):
-                    for x in range(chunk_width):
+                    for x in range(chunk_width - 1, -1, -1):
                         if chunk[y][x] == b.WATER:
-                            key = (ci, x, y)
-                            def get_cell(ci_target, x_target, y_target):
-                                if ci_target in world_chunks and 0 <= x_target < chunk_width and 0 <= y_target < world_height:
-                                    return world_chunks[ci_target][y_target][x_target]
-                                return None
-                            def set_cell(ci_target, x_target, y_target, value):
-                                if ci_target in world_chunks and 0 <= x_target < chunk_width and 0 <= y_target < world_height:
-                                    world_chunks[ci_target][y_target][x_target] = value
-                            # Move water downward if possible
-                            if y + 1 < world_height and get_cell(ci, x, y + 1) == b.AIR:
-                                set_cell(ci, x, y + 1, b.WATER)
-                                set_cell(ci, x, y, b.AIR)
-                                water_flow.pop(key, None)
+                            # Check directly below first
+                            if y + 1 < world_height and chunk[y + 1][x] == b.AIR:
+                                chunk[y + 1][x] = b.WATER
+                                chunk[y][x] = b.AIR
                                 continue
-                            # Lateral movement based on water_flow
-                            current_dir = water_flow.get(key, 0)
-                            if current_dir:
-                                if current_dir == -1:
-                                    new_ci, new_x = (ci - 1, chunk_width - 1) if x == 0 else (ci, x - 1)
-                                else:
-                                    new_ci, new_x = (ci + 1, 0) if x == chunk_width - 1 else (ci, x + 1)
-                                if get_cell(new_ci, new_x, y) == b.AIR:
-                                    set_cell(new_ci, new_x, y, b.WATER)
-                                    set_cell(ci, x, y, b.AIR)
-                                    water_flow.pop(key, None)
-                                    water_flow[(new_ci, new_x, y)] = current_dir
-                                else:
-                                    water_flow.pop(key, None)
-                                continue
-                            else:
-                                choices = []
-                                new_ci, new_x = (ci - 1, chunk_width - 1) if x == 0 else (ci, x - 1)
-                                if get_cell(new_ci, new_x, y) == b.AIR:
-                                    choices.append((-1, new_ci, new_x))
-                                new_ci, new_x = (ci + 1, 0) if x == chunk_width - 1 else (ci, x + 1)
-                                if get_cell(new_ci, new_x, y) == b.AIR:
-                                    choices.append((1, new_ci, new_x))
-                                if choices:
-                                    d, target_ci, target_x = random.choice(choices)
-                                    set_cell(target_ci, target_x, y, b.WATER)
-                                    set_cell(ci, x, y, b.AIR)
-                                    water_flow[(target_ci, target_x, y)] = d
-        
+                            
+                            # Check diagonal down-left and down-right
+                            for dx in [-1, 1]:
+                                new_x = x + dx
+                                new_ci = ci
+                                
+                                # Handle chunk boundaries
+                                if new_x >= chunk_width:
+                                    new_ci = ci + 1
+                                    new_x = 0
+                                elif new_x < 0:
+                                    new_ci = ci - 1
+                                    new_x = chunk_width - 1
+
+                                if new_ci in world_chunks:
+                                    if y + 1 < world_height and world_chunks[new_ci][y + 1][new_x] == b.AIR:
+                                        world_chunks[new_ci][y + 1][new_x] = b.WATER
+                                        chunk[y][x] = b.AIR
+                                        break
+
+                # Second pass: Handle horizontal flow
+                for y in range(world_height - 1, -1, -1):
+                    for x in range(chunk_width - 1, -1, -1):
+                        if chunk[y][x] == b.WATER:
+                            # Only spread horizontally if we can't go down
+                            if y + 1 >= world_height or (chunk[y + 1][x] != b.AIR and chunk[y + 1][x] != b.WATER):
+                                # Try to spread horizontally
+                                for dx in [-1, 1]:
+                                    new_x = x + dx
+                                    new_ci = ci
+                                    
+                                    # Handle chunk boundaries
+                                    if new_x >= chunk_width:
+                                        new_ci = ci + 1
+                                        new_x = 0
+                                    elif new_x < 0:
+                                        new_ci = ci - 1
+                                        new_x = chunk_width - 1
+
+                                    if new_ci in world_chunks and world_chunks[new_ci][y][new_x] == b.AIR:
+                                        # Only spread if there's support below
+                                        if y + 1 >= world_height or world_chunks[new_ci][y + 1][new_x] != b.AIR:
+                                            world_chunks[new_ci][y][new_x] = b.WATER
+                                            # Don't remove source block for horizontal spread
+
         # Update world items: pass world_info for collision detection.
         for world_item in world_items:
             world_item.update(dt, world_info)
@@ -812,6 +833,13 @@ def main():
         # Draw death menu last (after console)
         if death_menu and not player.is_alive:
             death_menu.draw(screen)
+
+        # Add plant growth updates to the game loop
+        for ci, chunk in world_chunks.items():
+            for y, row in enumerate(chunk):
+                for x, block_obj in enumerate(row):
+                    if isinstance(block_obj, b.FarmingBlock):
+                        block_obj.update(dt)
 
         pygame.display.flip()
         

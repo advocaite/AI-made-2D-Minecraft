@@ -2,34 +2,22 @@ import pygame
 import config as c
 
 class Item:
-    def __init__(self, id, name, texture_coords, stack_size=64, is_block=False, **kwargs):
+    def __init__(self, id, name, texture_coords, stack_size=64, is_block=False, burn_time=0):
         self.id = id
         self.name = name
         self.texture_coords = texture_coords
         self.stack_size = stack_size
         self.is_block = is_block
+        self.burn_time = burn_time
+        self.type = None  # weapon, tool, armor, consumable, etc.
+        self.modifiers = {}
+        self.enhanced_suffix = ""
         self.is_armor = False
-        self.is_seed = kwargs.get('is_seed', False)  # Add this line
-        self.effective_against = kwargs.get('effective_against', [])
-        self.consumable_type = kwargs.get('consumable_type', None)
-        self.block = None
-        self.burn_time = kwargs.get('burn_time', 0)
+        self.consumable_type = None  # food, drink, etc.
+        self.effective_against = []  # List of block names this tool is effective against
+        self.is_seed = False
+        self.plant_data = None
         self.melt_result = None
-        self.hunger_restore = kwargs.get('hunger_restore', 0)
-        self.thirst_restore = kwargs.get('thirst_restore', 0)
-        self.health_restore = kwargs.get('health_restore', 0)
-        self.tint = None  # Added this for the get_texture method
-        self.type = kwargs.get('type', None)  # Changed to get from kwargs
-
-        # Add stat modifiers
-        self.modifiers = {
-            'damage': 0,
-            'defense': 0,
-            'health': 0,
-            'attack_speed': 0,
-            'movement_speed': 0
-        }
-        self.enhanced_suffix = ""  # For names like "Iron Sword of Sharpness"
 
     def get_texture(self, atlas):
         block_size = c.BLOCK_SIZE
@@ -75,74 +63,96 @@ class Item:
                 stats.append(f"{stat.replace('_', ' ').title()}: +{value}")
         return "\n".join(stats)
 
-# Define tool items with effective_against set:
-ITEM_PICKAXE = Item(100, "Pickaxe", (0, 0), stack_size=1, effective_against=["Stone", "Dirt", "Coal Ore", "Iron Ore", "Gold Ore"])
-ITEM_AXE = Item(101, "Axe", (1, 0), stack_size=1, effective_against=["Wood"])
-ITEM_SHOVEL = Item(102, "Shovel", (2, 0), stack_size=1, effective_against=["Dirt"])
-ITEM_SWORD = Item(103, "Sword", (3, 0), stack_size=1)
+# Define item IDs in clear ranges:
+# 1-99: Basic blocks (defined in block.py)
+# 100-199: Consumables
+# 200-299: Materials
+# 300-399: Armor
+# 400-499: Tools and Weapons
 
-# New test items for consumables:
-APPLE = Item(104, "Apple", (0, 0), stack_size=10, consumable_type="food", hunger_restore=20)
-WATER_BOTTLE = Item(105, "Water Bottle", (0, 1), stack_size=10, consumable_type="drink", thirst_restore=30)
+# Consumables (100-199)
+APPLE = Item(100, "Apple", (5, 0), stack_size=16)
+APPLE.consumable_type = "food"
+APPLE.healing = 20
+APPLE.hunger_restore = 30
 
-# Define meltable items and their results
-IRON_INGOT = Item(200, "Iron Ingot", (20, 1), stack_size=64)
-GOLD_INGOT = Item(201, "Gold Ingot", (20, 2), stack_size=64)
-COAL = Item(202, "Coal", (20, 3), stack_size=64, burn_time=2000)  # Coal burns for 2 seconds
+WATER_BOTTLE = Item(101, "Water Bottle", (6, 0), stack_size=16)
+WATER_BOTTLE.consumable_type = "drink"
+WATER_BOTTLE.thirst_restore = 40
 
-# Create registries for items that can be melted or used as fuel
-MELTABLE_ITEMS = {
-    17: IRON_INGOT,  # Iron Ore -> Iron Ingot
-    18: GOLD_INGOT,  # Gold Ore -> Gold Ingot
-    16: COAL        # Coal Ore -> Coal
-}
+# Create WHEAT_SEED first without plant_data
+WHEAT_SEED = Item(150, "Wheat Seed", (20, 0), stack_size=64)
+WHEAT_SEED.is_seed = True
 
-FUEL_ITEMS = {
-    19: 1000,     # Wood burns for 1 second
-    202: 2000     # Coal burns for 2 seconds
-}
+# Base drops for growth stages (using the already created WHEAT_SEED)
+WHEAT_DROPS = [
+    [(WHEAT_SEED, 1)],  # Stage 0 drops
+    [(WHEAT_SEED, 1)],  # Stage 1 drops
+    [(WHEAT_SEED, 2)],  # Stage 2 drops
+    [(WHEAT_SEED, 3)]   # Stage 3 drops (fully grown)
+]
 
-# Create armor items with types
-IRON_HELMET = Item(30, "Iron Helmet", (5, 1), stack_size=1)
-IRON_HELMET.type = "helmet"
-
-IRON_CHESTPLATE = Item(31, "Iron Chestplate", (5, 2), stack_size=1)
-IRON_CHESTPLATE.type = "chestplate"
-
-IRON_LEGGINGS = Item(32, "Iron Leggings", (5, 3), stack_size=1)
-IRON_LEGGINGS.type = "leggings"
-
-IRON_BOOTS = Item(33, "Iron Boots", (5, 4), stack_size=1)
-IRON_BOOTS.type = "boots"
-
-# Tools and weapons with types
-IRON_SWORD = Item(40, "Iron Sword", (6, 1), stack_size=1)
-IRON_SWORD.type = "weapon"
-
-IRON_PICKAXE = Item(41, "Iron Pickaxe", (6, 2), stack_size=1)
-IRON_PICKAXE.type = "tool"
-
-IRON_AXE = Item(42, "Iron Axe", (6, 3), stack_size=1)
-IRON_AXE.type = "tool"
-
-IRON_SHOVEL = Item(43, "Iron Shovel", (6, 4), stack_size=1)
-IRON_SHOVEL.type = "tool"
-
-# Example seed item with growth data
-WHEAT_SEED = Item(300, "Wheat Seeds", (21, 0), stack_size=64, is_seed=True)
+# Now assign plant_data using the predefined drops
 WHEAT_SEED.plant_data = {
-    'growth_stages': [0, 1, 2],  # 3 growth stages
-    'growth_time': 10000,  # 10 seconds per stage
-    'texture_coords': [(21, 0), (21, 3), (21, 6)],  # Different texture for each stage
-    'drops': [
-        [(WHEAT_SEED, 1)],  # Stage 0 drops: 1 seed
-        [(WHEAT_SEED, 1)],  # Stage 1 drops: 1 seed
-        [(WHEAT_SEED, 2), (Item(301, "Wheat", (20, 7), stack_size=64), 1)]  # Final stage: 2 seeds + 1 wheat
-    ]
+    'growth_stages': [0, 1, 2, 3],
+    'growth_time': 5000,
+    'texture_coords': [(21, 0), (21, 1), (21, 2), (21, 3)],
+    'drops': WHEAT_DROPS
 }
 
-# Example farming tool
-HOE_ITEM = Item(302, "Hoe", (21, 0), stack_size=1, type="hoe")
+# Materials (200-299)
+IRON_INGOT = Item(200, "Iron Ingot", (7, 0))
+GOLD_INGOT = Item(201, "Gold Ingot", (8, 0))
+COAL = Item(202, "Coal", (9, 0), burn_time=2000)
+
+# Armor (300-399)
+IRON_HELMET = Item(300, "Iron Helmet", (10, 0), stack_size=1)
+IRON_HELMET.is_armor = True
+IRON_HELMET.type = "armor"
+IRON_HELMET.modifiers = {"defense": 5, "health": 10}
+
+IRON_CHESTPLATE = Item(301, "Iron Chestplate", (11, 0), stack_size=1)
+IRON_CHESTPLATE.is_armor = True
+IRON_CHESTPLATE.type = "armor"
+IRON_CHESTPLATE.modifiers = {"defense": 8, "health": 20}
+
+IRON_LEGGINGS = Item(302, "Iron Leggings", (12, 0), stack_size=1)
+IRON_LEGGINGS.is_armor = True
+IRON_LEGGINGS.type = "armor"
+IRON_LEGGINGS.modifiers = {"defense": 6, "health": 15}
+
+IRON_BOOTS = Item(303, "Iron Boots", (13, 0), stack_size=1)
+IRON_BOOTS.is_armor = True
+IRON_BOOTS.type = "armor"
+IRON_BOOTS.modifiers = {"defense": 4, "health": 5, "movement_speed": 0.2}
+
+# Tools and Weapons (400-499)
+IRON_SWORD = Item(400, "Iron Sword", (14, 0), stack_size=1)
+IRON_SWORD.type = "weapon"
+IRON_SWORD.modifiers = {"damage": 10, "attack_speed": 1.0}
+
+IRON_PICKAXE = Item(401, "Iron Pickaxe", (15, 0), stack_size=1)
+IRON_PICKAXE.type = "tool"
+IRON_PICKAXE.effective_against = ["Stone", "Coal Ore", "Iron Ore", "Gold Ore"]
+IRON_PICKAXE.modifiers = {"damage": 5}
+
+IRON_AXE = Item(402, "Iron Axe", (16, 0), stack_size=1)
+IRON_AXE.type = "tool"
+IRON_AXE.effective_against = ["Wood"]
+IRON_AXE.modifiers = {"damage": 8}
+
+IRON_SHOVEL = Item(403, "Iron Shovel", (17, 0), stack_size=1)
+IRON_SHOVEL.type = "tool"
+IRON_SHOVEL.effective_against = ["Dirt", "Grass"]
+IRON_SHOVEL.modifiers = {"damage": 4}
+
+IRON_HOE = Item(404, "Iron Hoe", (18, 0), stack_size=1)
+IRON_HOE.type = "hoe"  # Change from "tool" to "hoe"
+IRON_HOE.effective_against = ["Crops", "Farmland"]
+
+# Special registries for meltable and fuel items
+MELTABLE_ITEMS = {}  # Will be populated in block.py for ore->ingot recipes
+FUEL_ITEMS = {}      # Will be populated in block.py for items with burn_time
 
 # Update tooltip function to show modifiers
 def get_item_tooltip(item):
@@ -170,17 +180,33 @@ def get_item_tooltip(item):
         
     return '\n'.join(lines)
 
-# Add to bottom of file, after all other definitions:
+# Global item registry - all items must be registered here
 ITEM_REGISTRY = {
-    # Add all existing items
-    100: ITEM_PICKAXE,
-    101: ITEM_AXE,
-    102: ITEM_SHOVEL,
-    103: ITEM_SWORD,
+    # Consumables
+    100: APPLE,
+    101: WATER_BOTTLE,
+    150: WHEAT_SEED,  # Add wheat seed
+    # Materials
     200: IRON_INGOT,
     201: GOLD_INGOT,
     202: COAL,
-    # Add farming items
-    300: WHEAT_SEED,
-    302: HOE_ITEM,
+    # Armor
+    300: IRON_HELMET,
+    301: IRON_CHESTPLATE,
+    302: IRON_LEGGINGS,
+    303: IRON_BOOTS,
+    # Tools and Weapons
+    400: IRON_SWORD,
+    401: IRON_PICKAXE,
+    402: IRON_AXE,
+    403: IRON_SHOVEL,
+    404: IRON_HOE,
 }
+
+# Verify no duplicate IDs exist
+if len(set(ITEM_REGISTRY.keys())) != len(ITEM_REGISTRY):
+    raise ValueError("Duplicate item IDs detected in ITEM_REGISTRY!")
+
+print("Item registry initialized with", len(ITEM_REGISTRY), "items")
+for item_id, item in sorted(ITEM_REGISTRY.items()):
+    print(f"Registered item {item.name} with ID {item_id}")
