@@ -20,6 +20,7 @@ from death_menu import DeathMenu  # new import
 from storage_ui import StorageUI  # new import
 from furnace_ui import FurnaceUI  # new import
 from enhancer_ui import EnhancerUI  # Add this import
+from ui.progress_bar import ProgressBar  # Add this import
 
 class World:
     def __init__(self):
@@ -152,6 +153,10 @@ def main():
     last_spawn_time = {}
 
     death_menu = None
+
+    health_bar = ProgressBar(10, c.SCREEN_HEIGHT - 90, 200, 20, color=(255, 50, 50))
+    hunger_bar = ProgressBar(10, c.SCREEN_HEIGHT - 60, 200, 20, color=(139, 69, 19))
+    thirst_bar = ProgressBar(10, c.SCREEN_HEIGHT - 30, 200, 20, color=(0, 191, 255))
 
     while True:
         dt = clock.tick(60)  # milliseconds since last frame
@@ -725,10 +730,9 @@ def main():
                 mob.draw(screen, cam_offset_x, cam_offset_y)
         
         # New: Render HUD for health, hunger, and thirst.
-        hud_font = pygame.font.SysFont(None, 24)
-        stats_text = f"Health: {int(player.health)}  Hunger: {int(player.hunger)}  Thirst: {int(player.thirst)}"
-        stats_surface = hud_font.render(stats_text, True, (255, 255, 255))
-        screen.blit(stats_surface, (5, c.SCREEN_HEIGHT - 30))
+        health_bar.draw(screen, player.health, "Health")
+        hunger_bar.draw(screen, player.hunger, "Hunger")
+        thirst_bar.draw(screen, player.thirst, "Thirst")
         
         # Remove old overlay code.
         
