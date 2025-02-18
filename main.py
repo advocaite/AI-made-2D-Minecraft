@@ -510,23 +510,26 @@ def main():
                 # Left click: break block (one per click)
                 if mouse_buttons[0] and world_chunks[chunk_index][world_y][local_x] != b.UNBREAKABLE and not broken_block:
                     block = world_chunks[chunk_index][world_y][local_x]
-                    selected = player_inventory.get_selected_item()
-                    if selected and hasattr(selected["item"], "effective_against") and selected["item"].effective_against:
-                        tool = selected["item"]
-                        if block.name in tool.effective_against:
+                    if block.id != 0 and block != b.AIR:  # Add this check
+                        selected = player_inventory.get_selected_item()
+                        if selected and hasattr(selected["item"], "effective_against") and selected["item"].effective_against:
+                            tool = selected["item"]
+                            if block.name in tool.effective_against:
+                                world_chunks[chunk_index][world_y][local_x] = b.AIR
+                                broken_block = True
+                                # Only add to inventory if block has an item variant
+                                if hasattr(block, 'item_variant') and block.item_variant:
+                                    player_inventory.add_item(block.item_variant, 1)
+                                print(f"Effective break: {block.name} with {tool.name}")
+                            else:
+                                print(f"{tool.name} is not effective against {block.name}")
+                        else:
                             world_chunks[chunk_index][world_y][local_x] = b.AIR
                             broken_block = True
-                            if block.item_variant:  # Changed from drop_item to item_variant
+                            # Only add to inventory if block has an item variant
+                            if hasattr(block, 'item_variant') and block.item_variant:
                                 player_inventory.add_item(block.item_variant, 1)
-                            print(f"Effective break: {block.name} with {tool.name}")
-                        else:
-                            print(f"{tool.name} is not effective against {block.name}")
-                    else:
-                        world_chunks[chunk_index][world_y][local_x] = b.AIR
-                        broken_block = True
-                        if block.item_variant:  # Changed from drop_item to item_variant
-                            player_inventory.add_item(block.item_variant, 1)
-                        print(f"Breaking block: {block.name}, drop_item: {block.drop_item}")
+                            print(f"Breaking block: {block.name}, drop_item: {block.drop_item}")
                 # Right click: process placement in action mode
                 if mouse_buttons[2] and not placed_water:  # Right click
                     selected = player_inventory.get_selected_item()
