@@ -8,10 +8,11 @@ class Console:
         self.font = font
         self.screen_width = screen_width
         self.screen_height = screen_height
-        self.manager = CommandManager()
+        self.manager = CommandManager(game=self)  # Pass self as game
         self.player = player
         self.inventory = inventory
         self.mobs = mobs  # Add mobs to the constructor
+        self.manager.inventory = self.inventory  # Set inventory directly
         self.output_lines = []
         self.commands = {
             'setday': self.set_day,
@@ -31,6 +32,7 @@ class Console:
         self.selection_start = None
         self.selection_end = None
         self.cursor_position = 0  # Initialize cursor position
+        self.max_lines = 10  # Add max lines for output history
 
         # Initialize the scrap system
         pygame.scrap.init()
@@ -42,11 +44,11 @@ class Console:
                 self.player.paused = self.active  # Pause character movement when console is active
             elif self.active:
                 if event.key == pygame.K_RETURN:
-                    self.history.append(self.input_text)
-                    self.history_index = len(self.history)
-                    self.manager.execute_command(self.input_text, self.player, self.inventory, self.mobs)  # Pass mobs to CommandManager
-                    self.execute_command(self.input_text)
-                    self.input_text = ""
+                    if self.input_text:
+                        self.execute_command(self.input_text)
+                        self.history.append(self.input_text)
+                        self.input_text = ""
+                        self.history_index = len(self.history)
                     self.selection_start = None
                     self.selection_end = None
                     self.cursor_position = 0
@@ -149,24 +151,31 @@ class Console:
         return len(self.input_text)
 
     def execute_command(self, command_line):
+        """Execute a command and handle special cases"""
         parts = command_line.strip().split()
         if not parts:
             return
-        # Combine "set weather" into "setweather" if applicable.
+
+        # Add command to output history
+        self.output_lines.append("> " + command_line)
+        self.output_lines = self.output_lines[-self.max_lines:]
+
+        # Check for special commands first
         if len(parts) >= 2 and parts[0].lower() == "set" and parts[1].lower() == "weather":
             cmd = "setweather"
             args = parts[2:]
-        # NEW: Combine "spawn entity" into "spawn_entity" if applicable.
+            if cmd in self.commands:
+                self.commands[cmd](args)
+                return
         elif len(parts) >= 2 and parts[0].lower() == "spawn" and parts[1].lower() == "entity":
             cmd = "spawn_entity"
             args = parts[2:]
-        else:
-            cmd = parts[0].lower()
-            args = parts[1:]
-        if cmd in self.commands:
-            self.commands[cmd](args)
-        else:
-            self.output_lines.append("Unknown command: " + cmd)
+            if cmd in self.commands:
+                self.commands[cmd](args)
+                return
+
+        # Otherwise pass to command manager
+        self.manager.execute_command(command_line, self.player, self.inventory, self.mobs)
 
     def set_day(self, args):
         self.output_lines.append("Time set to day")

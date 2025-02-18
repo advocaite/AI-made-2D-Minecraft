@@ -1,0 +1,11 @@
+{
+    "FARMLAND": {
+        "id": 25,
+        "name": "Farmland",
+        "type": "farming",
+        "solid": true,
+        "color": [139, 69, 19],
+        "texture_coords": [13, 0],
+        "script": "scripts/blocks/farming_block.py"
+    }
+}

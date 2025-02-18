@@ -1,0 +1,34 @@
+{
+    "LEAVES": {
+        "id": 20,
+        "name": "Leaves",
+        "type": "basic",
+        "solid": true,
+        "color": [34, 139, 34],
+        "texture_coords": [9, 12],
+        "animation_frames": [
+            [9, 12],
+            [10, 12],
+            [11, 12],
+            [12, 12]
+        ],
+        "frame_duration": 300,
+        "tint": [34, 139, 34]
+    },
+    "LEAVES_GOLDEN": {
+        "id": 21,
+        "name": "Golden Leaves",
+        "type": "basic",
+        "solid": true,
+        "color": [85, 170, 47],
+        "texture_coords": [9, 12],
+        "animation_frames": [
+            [9, 12],
+            [10, 12],
+            [11, 12],
+            [12, 12]
+        ],
+        "frame_duration": 300,
+        "tint": [85, 170, 47]
+    }
+}

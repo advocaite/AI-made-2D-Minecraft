@@ -1,0 +1,56 @@
+{
+    "SAND": {
+        "id": 30,
+        "name": "Sand",
+        "type": "basic",
+        "solid": true,
+        "color": [194, 178, 128],
+        "texture_coords": [18, 5]
+    },
+    "SANDSTONE": {
+        "id": 31,
+        "name": "Sandstone",
+        "type": "basic",
+        "solid": true,
+        "color": [219, 211, 160],
+        "texture_coords": [18, 6]
+    },
+    "SNOW_GRASS": {
+        "id": 32,
+        "name": "Snowy Grass",
+        "type": "basic",
+        "solid": true,
+        "color": [200, 200, 200],
+        "texture_coords": [3, 10],
+        "tint": [200, 200, 200],
+        "drop_item": "SNOW_DIRT"
+    },
+    "SNOW_DIRT": {
+        "id": 33,
+        "name": "Frozen Dirt",
+        "type": "basic",
+        "solid": true,
+        "color": [150, 150, 150],
+        "texture_coords": [8, 5],
+        "tint": [200, 200, 200]
+    },
+    "SAVANNA_GRASS": {
+        "id": 34,
+        "name": "Savanna Grass",
+        "type": "basic",
+        "solid": true,
+        "color": [169, 178, 37],
+        "texture_coords": [8, 6],
+        "tint": [169, 178, 37],
+        "drop_item": "SAVANNA_DIRT"
+    },
+    "SAVANNA_DIRT": {
+        "id": 35,
+        "name": "Savanna Dirt",
+        "type": "basic",
+        "solid": true,
+        "color": [130, 100, 60],
+        "texture_coords": [8, 5],
+        "tint": [169, 178, 37]
+    }
+}

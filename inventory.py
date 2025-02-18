@@ -218,31 +218,3 @@ class Inventory:
             blocks = [blk for key, blk in sorted(BLOCK_MAP.items()) if blk != AIR]
             for blk in blocks[:9]:
                 self.fill_empty_hotbar_slot(blk.item_variant, 64)
-
-    def set_armor_slot(self, index, item):
-        """Handle equipping/unequipping armor pieces"""
-        if self.armor[index]:
-            # Unequip old item
-            old_item = self.armor[index]["item"]
-            self.player.unequip_item(old_item)
-        
-        if item:
-            # Equip new item
-            self.armor[index] = item
-            self.player.equip_item(item["item"])
-        else:
-            self.armor[index] = None
-
-    def set_hotbar_slot(self, index, item):
-        """Handle equipping/unequipping weapons and tools"""
-        if self.hotbar[index] and self.hotbar[index]["item"].type in ["weapon", "tool"]:
-            # Unequip old item
-            old_item = self.hotbar[index]["item"]
-            self.player.unequip_item(old_item)
-        
-        if item and item["item"].type in ["weapon", "tool"]:
-            # Equip new item
-            self.hotbar[index] = item
-            self.player.equip_item(item["item"])
-        else:
-            self.hotbar[index] = item

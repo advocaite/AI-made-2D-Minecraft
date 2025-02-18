@@ -212,6 +212,32 @@ class ItemScript:
                 self.items[item_id] = item
                 print(f"Loaded {item.name} from {category}")
 
+    def load_items(self):
+        """Load all item definitions from JSON files"""
+        if not self.data_dir.exists():
+            print(f"Warning: Data directory {self.data_dir} does not exist")
+            return
+
+        all_item_data = {}
+        for file in self.data_dir.glob("*.json"):
+            try:
+                with open(file, encoding='utf-8') as f:
+                    items = json.load(f)
+                    for item_id, item_data in items.items():
+                        # Ensure all strings are properly decoded
+                        decoded_data = self._decode_data(item_data)
+                        all_item_data[item_id] = (decoded_data, file.stem)
+            except Exception as e:
+                print(f"Error loading {file}: {e}")
+                continue
+
+        # Process items after all data is loaded
+        for item_id, (data, category) in all_item_data.items():
+            item = self.create_item(item_id, data, category)
+            if item:
+                self.items[item_id] = item
+                print(f"Loaded {item.name} from {category}")
+
     def _decode_data(self, data):
         """Recursively decode all strings in the data structure"""
         if isinstance(data, dict):

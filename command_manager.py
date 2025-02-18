@@ -1,44 +1,19 @@
 import config as c
-from block import BLOCK_MAP, Block, StorageBlock, FurnaceBlock, EnhancerBlock
-from item import Item
+from block_loader import BlockLoader
+from item import ITEM_REGISTRY  # Add this to access items
 
 class CommandManager:
-    def __init__(self):
-        self.item_map = {}
-        self.build_item_map()
-
-    def build_item_map(self):
-        """Dynamically build the item map from all available blocks and items"""
-        # Add all blocks from BLOCK_MAP
-        for block_id, block in BLOCK_MAP.items():
-            if block.item_variant:
-                # Add by ID
-                self.item_map[block_id] = block.item_variant
-                # Add by name (uppercase)
-                self.item_map[block.name.upper()] = block.item_variant
-                
-                # Special handling for blocks that need instances
-                if isinstance(block, (StorageBlock, FurnaceBlock, EnhancerBlock)):
-                    def create_instanced_item(block=block):
-                        instance = block.create_instance()
-                        return instance.item_variant
-                    self.item_map[block_id] = create_instanced_item
-                    self.item_map[block.name.upper()] = create_instanced_item
-
-        # Import all defined items from item module
-        import item as item_module
-        for attr_name in dir(item_module):
-            attr = getattr(item_module, attr_name)
-            if isinstance(attr, Item):
-                # Add by name if it's in uppercase (conventional for constants)
-                if attr_name.isupper():
-                    self.item_map[attr_name] = attr
-                # Add by ID if the item has one
-                if hasattr(attr, 'id'):
-                    self.item_map[attr.id] = attr
+    def __init__(self, game=None):
+        self.game = game
+        self.inventory = None
+        self.block_loader = BlockLoader()
+        self.blocks = self.block_loader.load_blocks()
+        self.items = ITEM_REGISTRY  # Add access to item registry
+        print("Available items:", [item_id for item_id in self.items.keys()])
 
     def execute_command(self, command_str, player, inventory, mobs):
         """Handle command execution"""
+        self.inventory = inventory
         tokens = command_str.strip().split()
         if not tokens:
             return
@@ -46,32 +21,7 @@ class CommandManager:
         cmd = tokens[0].lower()
         
         if cmd == "spawn_item":
-            try:
-                try:
-                    key = int(tokens[1])
-                except ValueError:
-                    key = tokens[1].upper()
-                quantity = int(tokens[2]) if len(tokens) > 2 else 1
-                
-                if key in self.item_map:
-                    item_source = self.item_map[key]
-                    
-                    # Handle factory functions for instanced blocks
-                    if callable(item_source):
-                        item = item_source()
-                    else:
-                        item = item_source
-                        
-                    inventory.add_item(item, quantity)
-                    print(f"[INFO] Spawned {quantity} of {item.name}")
-                else:
-                    print(f"[WARN] Item id/name not recognized: {key}")
-                    print("Available items:", ", ".join(str(k) for k in self.item_map.keys()))
-            except Exception as e:
-                print(f"[ERROR] Spawn item command failed: {str(e)}")
-                print("Usage: spawn_item <item_id|item_name> <quantity>")
-
-        # ... rest of execute_command implementation ...
+            self.handle_spawn_item(tokens[1:])
         elif cmd == "teleport":
             try:
                 x = int(tokens[1])
@@ -110,3 +60,55 @@ class CommandManager:
                 print("Usage: spawn_entity <entity_type> [<x> <y>]")
         else:
             print("[WARN] Unknown command:", cmd)
+
+    def handle_spawn_item(self, args):
+        if len(args) < 2:
+            print("Usage: spawn_item <item_id|item_name> <quantity>")
+            return False
+
+        item_id = args[0].upper()
+        try:
+            quantity = int(args[1])
+        except ValueError:
+            print("Quantity must be a number")
+            return False
+
+        print(f"Looking for item: {item_id}")
+        print(f"Available item IDs: {list(self.items.keys())}")
+        print(f"Available item names: {[item.name for item in self.items.values()]}")
+
+        # Try to find item by ID or name
+        found_item = None
+        
+        # Check direct item ID match
+        if item_id in self.items:
+            found_item = self.items[item_id]
+        else:
+            # Try to find by name
+            for registry_item in self.items.values():
+                if (registry_item.name.upper() == item_id or 
+                    registry_item.name.upper().replace(" ", "_") == item_id):
+                    found_item = registry_item
+                    break
+
+        if found_item:
+            if self.inventory:
+                self.inventory.add_item(found_item, quantity)
+                print(f"Spawned {quantity}x {found_item.name}")
+                return True
+            return False
+
+        # If not found in items, try blocks (existing block lookup code)
+        for block in self.blocks.values():
+            if (str(block.id) == item_id or 
+                block.name.upper() == item_id or 
+                block.name.upper().replace(" ", "_") == item_id):
+                if block.item_variant:
+                    if self.inventory:
+                        self.inventory.add_item(block.item_variant, quantity)
+                        print(f"Spawned {quantity}x {block.name}")
+                        return True
+                break
+
+        print(f"Item '{item_id}' not found")
+        return False

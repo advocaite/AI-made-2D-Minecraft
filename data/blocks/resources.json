@@ -1,0 +1,44 @@
+{
+    "COAL_ORE": {
+        "id": 16,
+        "name": "Coal Ore",
+        "type": "basic",
+        "solid": true,
+        "color": [0, 0, 0],
+        "texture_coords": [1, 5],
+        "drop_item": "COAL",
+        "mine_level": 1
+    },
+    "IRON_ORE": {
+        "id": 17,
+        "name": "Iron Ore",
+        "type": "basic",
+        "solid": true,
+        "color": [220, 220, 220],
+        "texture_coords": [0, 12],
+        "drop_item": "IRON_ORE",
+        "mine_level": 2,
+        "melt_result": "IRON_INGOT"
+    },
+    "GOLD_ORE": {
+        "id": 18,
+        "name": "Gold Ore",
+        "type": "basic",
+        "solid": true,
+        "color": [255, 215, 0],
+        "texture_coords": [0, 10],
+        "drop_item": "GOLD_ORE",
+        "mine_level": 3,
+        "melt_result": "GOLD_INGOT"
+    },
+    "WOOD": {
+        "id": 19,
+        "name": "Wood",
+        "type": "basic",
+        "solid": true,
+        "color": [139, 69, 19],
+        "texture_coords": [1, 13],
+        "drop_item": "WOOD",
+        "burn_time": 1000
+    }
+}

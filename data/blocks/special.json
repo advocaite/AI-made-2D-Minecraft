@@ -1,0 +1,47 @@
+{
+    "SPAWNER": {
+        "id": 22,
+        "name": "Spawner",
+        "type": "basic",
+        "solid": true,
+        "color": [255, 0, 0],
+        "texture_coords": [5, 5],
+        "entity_type": "mob"
+    },
+    "STORAGE": {
+        "id": 23,
+        "name": "Storage",
+        "type": "storage",
+        "solid": true,
+        "color": [139, 69, 19],
+        "texture_coords": [15, 1],
+        "script": "scripts/blocks/storage_block.py"
+    },
+    "FURNACE": {
+        "id": 24,
+        "name": "Furnace",
+        "type": "furnace",
+        "solid": true,
+        "color": [100, 100, 100],
+        "texture_coords": [16, 1],
+        "script": "scripts/blocks/furnace_block.py"
+    },
+    "FARMLAND": {
+        "id": 25,
+        "name": "Farmland",
+        "type": "farming",
+        "solid": true,
+        "color": [139, 69, 19],
+        "texture_coords": [13, 0],
+        "script": "scripts/blocks/farming_block.py"
+    },
+    "ENHANCER": {
+        "id": 50,
+        "name": "Enhancer",
+        "type": "enhancer",
+        "solid": true,
+        "color": [100, 50, 150],
+        "texture_coords": [17, 1],
+        "script": "scripts/blocks/enhancer_block.py"
+    }
+}
