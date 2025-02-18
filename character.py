@@ -230,7 +230,7 @@ class Character:
                             new_anim = "run" if movement_pressed else "idle"
                             self.current_animation = new_anim
                             self.frame_index = 0
-                # Even when attacking without cancelation, allow horizontal movement.
+                # Even when attacking without cancellation, allow horizontal movement.
                 if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
                     self.move(self.speed)
                     self.facing = "right"
