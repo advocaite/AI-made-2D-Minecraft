@@ -336,7 +336,7 @@ class BlockEditor:
                 "id": int(self.entries['id'].get()),
                 "name": self.entries['name'].get(),
                 "type": self.entries['type'].get(),
-                "solid": bool(self.entries['solid'].get()),
+                "solid": self.entries['solid'].instate(['selected']),
                 "texture_coords": [
                     int(self.entries['texture_x'].get()),
                     int(self.entries['texture_y'].get())

@@ -41,7 +41,6 @@ class Tooltip:
         screen.blit(tooltip_surface, (x, y))
 
 def get_item_tooltip(item):
-    """Generate tooltip text for an item"""
     if not item:
         return None
 
@@ -50,12 +49,23 @@ def get_item_tooltip(item):
         f"ID: {item.id}"
     ]
 
-    # Add special properties
-    if hasattr(item, 'burn_time'):
+    # Add stats if they exist
+    if hasattr(item, "modifiers") and item.modifiers:
+        lines.append("")  # Empty line for spacing
+        stats = []
+        for stat, value in item.modifiers.items():
+            if value != 0:
+                stats.append(f"{stat.replace('_', ' ').title()}: +{value}")
+        lines.extend(stats)
+
+    # Add burn time if exists and is not None
+    if hasattr(item, 'burn_time') and item.burn_time is not None:
         lines.append(f"Burn time: {item.burn_time/1000:.1f}s")
+
+    # Add existing properties
     if hasattr(item, 'stack_size'):
         lines.append(f"Stack size: {item.stack_size}")
     if hasattr(item, 'is_block') and item.is_block:
         lines.append("Placeable block")
-        
+
     return '\n'.join(lines)
