@@ -1,0 +1,47 @@
+{
+    "IRON_HELMET": {
+        "category": "armor",
+        "id": 300,
+        "name": "Iron Helmet",
+        "texture_coords": [10, 0],
+        "stack_size": 1,
+        "modifiers": {
+            "defense": 5,
+            "health": 10
+        }
+    },
+    "IRON_CHESTPLATE": {
+        "category": "armor",
+        "id": 301,
+        "name": "Iron Chestplate",
+        "texture_coords": [11, 0],
+        "stack_size": 1,
+        "modifiers": {
+            "defense": 8,
+            "health": 20
+        }
+    },
+    "IRON_LEGGINGS": {
+        "category": "armor",
+        "id": 302,
+        "name": "Iron Leggings",
+        "texture_coords": [12, 0],
+        "stack_size": 1,
+        "modifiers": {
+            "defense": 6,
+            "health": 15
+        }
+    },
+    "IRON_BOOTS": {
+        "category": "armor",
+        "id": 303,
+        "name": "Iron Boots",
+        "texture_coords": [13, 0],
+        "stack_size": 1,
+        "modifiers": {
+            "defense": 4,
+            "health": 5,
+            "movement_speed": 0.2
+        }
+    }
+}

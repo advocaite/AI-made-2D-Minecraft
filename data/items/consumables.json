@@ -1,0 +1,25 @@
+{
+    "APPLE": {
+        "category": "consumable",
+        "id": 100,
+        "name": "Apple",
+        "texture_coords": [5, 0],
+        "stack_size": 16,
+        "consumable_type": "food",
+        "effects": {
+            "hunger_restore": 30.0,
+            "healing": 20.0
+        }
+    },
+    "WATER_BOTTLE": {
+        "category": "consumable",
+        "id": 101,
+        "name": "Water Bottle",
+        "texture_coords": [6, 0],
+        "stack_size": 16,
+        "consumable_type": "drink",
+        "effects": {
+            "thirst_restore": 40.0
+        }
+    }
+}

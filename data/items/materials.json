@@ -1,0 +1,24 @@
+{
+    "IRON_INGOT": {
+        "category": "material",
+        "id": 200,
+        "name": "Iron Ingot",
+        "texture_coords": [7, 0],
+        "stack_size": 64
+    },
+    "GOLD_INGOT": {
+        "category": "material",
+        "id": 201,
+        "name": "Gold Ingot",
+        "texture_coords": [8, 0],
+        "stack_size": 64
+    },
+    "COAL": {
+        "category": "material",
+        "id": 202,
+        "name": "Coal",
+        "texture_coords": [9, 0],
+        "stack_size": 64,
+        "burn_time": 2000
+    }
+}

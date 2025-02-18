@@ -1,0 +1,24 @@
+{
+    "IRON_PICKAXE": {
+        "category": "tool",
+        "id": 401,
+        "name": "Iron Pickaxe",
+        "texture_coords": [15, 0],
+        "stack_size": 1,
+        "effective_against": ["Stone", "Coal Ore", "Iron Ore", "Gold Ore"],
+        "modifiers": {
+            "damage": 5
+        }
+    },
+    "IRON_AXE": {
+        "category": "tool",
+        "id": 402,
+        "name": "Iron Axe",
+        "texture_coords": [16, 0],
+        "stack_size": 1,
+        "effective_against": ["Wood"],
+        "modifiers": {
+            "damage": 8
+        }
+    }
+}

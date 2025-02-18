@@ -1,0 +1,91 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "category": {
+            "type": "string",
+            "enum": ["weapon", "tool", "armor", "consumable", "material", "block", "seed"]
+        },
+        "id": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "name": {
+            "type": "string"
+        },
+        "texture_coords": {
+            "type": "array",
+            "items": {
+                "type": "integer"
+            },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "stack_size": {
+            "type": "integer",
+            "default": 64,
+            "minimum": 1,
+            "maximum": 64
+        },
+        "modifiers": {
+            "type": "object",
+            "properties": {
+                "damage": { "type": "number" },
+                "defense": { "type": "number" },
+                "health": { "type": "number" },
+                "attack_speed": { "type": "number" },
+                "movement_speed": { "type": "number" }
+            },
+            "additionalProperties": false
+        },
+        "effects": {
+            "type": "object",
+            "properties": {
+                "healing": { "type": "number" },
+                "hunger_restore": { "type": "number" },
+                "thirst_restore": { "type": "number" }
+            },
+            "additionalProperties": false
+        },
+        "burn_time": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "is_block": {
+            "type": "boolean"
+        },
+        "script": {
+            "type": "string"
+        },
+        "effective_against": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "plant_data": {
+            "type": "object",
+            "properties": {
+                "growth_stages": {
+                    "type": "array",
+                    "items": { "type": "integer" }
+                },
+                "growth_time": { "type": "integer" },
+                "texture_coords": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": { "type": "integer" },
+                        "minItems": 2,
+                        "maxItems": 2
+                    }
+                }
+            }
+        },
+        "consumable_type": {
+            "type": "string",
+            "enum": ["food", "drink", "potion"]
+        }
+    },
+    "required": ["category", "id", "name", "texture_coords"]
+}

@@ -1,2 +1,4 @@
 pygame
 noise
+jsonschema
+pillow

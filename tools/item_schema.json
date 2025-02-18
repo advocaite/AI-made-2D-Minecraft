@@ -1,0 +1,47 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "category": {
+            "type": "string",
+            "enum": ["weapon", "tool", "armor", "consumable", "material", "block", "seed"]
+        },
+        "id": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "name": {
+            "type": "string"
+        },
+        "texture_coords": {
+            "type": "array",
+            "items": {
+                "type": "integer"
+            },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "stack_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64
+        },
+        "inherits": {
+            "type": "string"
+        },
+        "modifiers": {
+            "type": "object",
+            "properties": {
+                "damage": { "type": "number" },
+                "defense": { "type": "number" },
+                "health": { "type": "number" },
+                "attack_speed": { "type": "number" },
+                "movement_speed": { "type": "number" }
+            }
+        },
+        "script": {
+            "type": "string"
+        }
+    },
+    "required": ["category", "id", "name", "texture_coords"]
+}

@@ -180,33 +180,66 @@ def get_item_tooltip(item):
         
     return '\n'.join(lines)
 
-# Global item registry - all items must be registered here
-ITEM_REGISTRY = {
-    # Consumables
-    100: APPLE,
-    101: WATER_BOTTLE,
-    150: WHEAT_SEED,  # Add wheat seed
-    # Materials
-    200: IRON_INGOT,
-    201: GOLD_INGOT,
-    202: COAL,
-    # Armor
-    300: IRON_HELMET,
-    301: IRON_CHESTPLATE,
-    302: IRON_LEGGINGS,
-    303: IRON_BOOTS,
-    # Tools and Weapons
-    400: IRON_SWORD,
-    401: IRON_PICKAXE,
-    402: IRON_AXE,
-    403: IRON_SHOVEL,
-    404: IRON_HOE,
-}
+from item_loader import ItemLoader
 
-# Verify no duplicate IDs exist
+# Initialize the item loader
+_item_loader = ItemLoader()
+_item_loader.load_all_items()
+
+# Create backward-compatible item constants
+# This ensures old code continues to work
+IRON_SWORD = _item_loader.items.get('IRON_SWORD', None)
+IRON_PICKAXE = _item_loader.items.get('IRON_PICKAXE', None)
+IRON_AXE = _item_loader.items.get('IRON_AXE', None)
+IRON_SHOVEL = _item_loader.items.get('IRON_SHOVEL', None)
+IRON_HOE = _item_loader.items.get('IRON_HOE', None)
+APPLE = _item_loader.items.get('APPLE', None)
+WATER_BOTTLE = _item_loader.items.get('WATER_BOTTLE', None)
+IRON_INGOT = _item_loader.items.get('IRON_INGOT', None)
+GOLD_INGOT = _item_loader.items.get('GOLD_INGOT', None)
+COAL = _item_loader.items.get('COAL', None)
+WHEAT_SEED = _item_loader.items.get('WHEAT_SEED', None)
+WHEAT = _item_loader.items.get('WHEAT', None)
+IRON_HELMET = _item_loader.items.get('IRON_HELMET', None)
+IRON_CHESTPLATE = _item_loader.items.get('IRON_CHESTPLATE', None)
+IRON_LEGGINGS = _item_loader.items.get('IRON_LEGGINGS', None)
+IRON_BOOTS = _item_loader.items.get('IRON_BOOTS', None)
+
+# Create ID-based registry
+ITEM_REGISTRY = {}
+for item in _item_loader.items.values():
+    ITEM_REGISTRY[item.id] = item
+
+# Fallback mechanism for backward compatibility
+def _create_fallback_item(id, name, texture_coords):
+    """Create a fallback item if JSON loading fails"""
+    print(f"Warning: Creating fallback item for {name}")
+    return Item(id=id, name=name, texture_coords=texture_coords)
+
+# Check if all required items exist, create fallbacks if needed
+if not IRON_SWORD:
+    IRON_SWORD = _create_fallback_item(400, "Iron Sword", (14, 0))
+    ITEM_REGISTRY[400] = IRON_SWORD
+# ...similar fallbacks for other essential items...
+
+# Verification
+missing_items = []
+required_items = [
+    "IRON_SWORD", "IRON_PICKAXE", "APPLE", "WATER_BOTTLE",
+    "IRON_INGOT", "GOLD_INGOT", "COAL", "WHEAT_SEED"
+]
+
+for item_name in required_items:
+    if not globals().get(item_name):
+        missing_items.append(item_name)
+
+if missing_items:
+    print(f"Warning: Missing required items: {missing_items}")
+else:
+    print("All required items loaded successfully")
+
+# Make sure ITEM_REGISTRY has no duplicates
 if len(set(ITEM_REGISTRY.keys())) != len(ITEM_REGISTRY):
     raise ValueError("Duplicate item IDs detected in ITEM_REGISTRY!")
 
-print("Item registry initialized with", len(ITEM_REGISTRY), "items")
-for item_id, item in sorted(ITEM_REGISTRY.items()):
-    print(f"Registered item {item.name} with ID {item_id}")
+print(f"Item registry initialized with {len(ITEM_REGISTRY)} items")

@@ -1,0 +1,26 @@
+{
+    "WHEAT_SEED": {
+        "category": "seed",
+        "id": 150,
+        "name": "Wheat Seed",
+        "texture_coords": [20, 0],
+        "stack_size": 64,
+        "plant_data": {
+            "growth_stages": [0, 1, 2, 3],
+            "growth_time": 5000,
+            "texture_coords": [
+                [21, 0],
+                [21, 1],
+                [21, 2],
+                [21, 3]
+            ]
+        }
+    },
+    "WHEAT": {
+        "category": "material",
+        "id": 151,
+        "name": "Wheat",
+        "texture_coords": [21, 4],
+        "stack_size": 64
+    }
+}
