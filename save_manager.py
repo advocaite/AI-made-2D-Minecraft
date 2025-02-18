@@ -6,6 +6,7 @@ from block import (
     StorageBlock, FurnaceBlock, EnhancerBlock
 )
 from item import ITEM_REGISTRY  # Just import ITEM_REGISTRY directly
+from registry import REGISTRY
 
 class SaveManager:
     def __init__(self, seed=None):
@@ -216,7 +217,6 @@ class SaveManager:
     def serialize_inventory(self, inventory):
         """Convert inventory to serializable format"""
         def serialize_slot(slot):
-            # Return explicit None if slot is empty
             if not slot or not slot.get('item'):
                 return {
                     'item_id': 0,
@@ -225,26 +225,19 @@ class SaveManager:
                 }
             
             item = slot['item']
-            # Create base item data
+            # Enhanced item data serialization
             item_data = {
-                'item_id': item.id,
+                'item_id': item.id if hasattr(item, 'id') else 0,
                 'quantity': slot['quantity'],
-                'name': item.name,
+                'name': item.name if hasattr(item, 'name') else "",
                 'is_block': getattr(item, 'is_block', False),
-                'texture_coords': item.texture_coords,
+                'texture_coords': getattr(item, 'texture_coords', (0, 0)),
                 'type': getattr(item, 'type', None),
                 'stack_size': getattr(item, 'stack_size', 64),
-                'is_empty': False
+                'is_empty': False,
+                # Add block reference data if it's a block item
+                'block_id': item.block.id if hasattr(item, 'block') and item.block else None
             }
-            
-            # Add special properties
-            if hasattr(item, 'modifiers'):
-                item_data['modifiers'] = item.modifiers
-            if hasattr(item, 'enhanced_suffix'):
-                item_data['enhanced_suffix'] = item.enhanced_suffix
-            if hasattr(item, 'burn_time'):
-                item_data['burn_time'] = item.burn_time
-
             return item_data
 
         return {
@@ -257,52 +250,38 @@ class SaveManager:
     def deserialize_inventory(self, inv_data):
         """Convert saved inventory data back to inventory format"""
         def deserialize_slot(slot_data):
-            # Always return a valid slot dictionary
             if not slot_data or slot_data.get('is_empty', True):
                 return {"item": None, "quantity": 0}
 
-            item_id = slot_data['item_id']
+            # Handle both old and new format
+            item_id = slot_data.get('item_id', 0)
+            
+            # First try getting from item registry
+            item = None
             if item_id in self.item_registry:
-                base_item = self.item_registry[item_id]
-                
-                # Create new instance
-                new_item = type(base_item)(
-                    id=item_id,
-                    name=slot_data['name'],
-                    texture_coords=slot_data['texture_coords'],
-                    stack_size=slot_data.get('stack_size', 64),
-                    is_block=slot_data.get('is_block', False)
-                )
+                item = self.item_registry[item_id]
+            
+            # If not found and it's a block item, try getting from block registry
+            if not item and slot_data.get('is_block'):
+                block = REGISTRY.get_block(str(item_id))
+                if block and hasattr(block, 'item_variant'):
+                    item = block.item_variant
 
-                # Restore special properties
-                if 'modifiers' in slot_data:
-                    new_item.modifiers = slot_data['modifiers']
-                if 'enhanced_suffix' in slot_data:
-                    new_item.enhanced_suffix = slot_data['enhanced_suffix']
-                    if slot_data['enhanced_suffix']:
-                        new_item.name = f"{new_item.name} {new_item.enhanced_suffix}"
-                if 'burn_time' in slot_data:
-                    new_item.burn_time = slot_data['burn_time']
-                if 'type' in slot_data and slot_data['type']:
-                    new_item.type = slot_data['type']
-
-                # Important: For block items, make sure to set the block reference
-                if slot_data.get('is_block') and hasattr(base_item, 'block'):
-                    new_item.block = base_item.block
-                    
+            # If we found an item, create the slot
+            if item:
                 return {
-                    "item": new_item,
-                    "quantity": slot_data['quantity']
+                    "item": item,
+                    "quantity": slot_data.get('quantity', 1)
                 }
-            print(f"Warning: Unknown item ID {item_id}")
-            return {"item": None, "quantity": 0}
+            else:
+                print(f"Warning: Could not deserialize item ID {item_id}")
+                return {"item": None, "quantity": 0}
 
-        # Make sure we preserve all slots, even empty ones
         return {
-            'hotbar': [deserialize_slot(slot) for slot in inv_data['hotbar']],
-            'armor': [deserialize_slot(slot) for slot in inv_data['armor']],
-            'main': [deserialize_slot(slot) for slot in inv_data['main']],
-            'selected_hotbar_index': inv_data['selected_hotbar_index']
+            'hotbar': [deserialize_slot(slot) for slot in inv_data.get('hotbar', [])],
+            'armor': [deserialize_slot(slot) for slot in inv_data.get('armor', [])],
+            'main': [deserialize_slot(slot) for slot in inv_data.get('main', [])],
+            'selected_hotbar_index': inv_data.get('selected_hotbar_index', 0)
         }
 
     def _serialize_inventory(self, slots):
@@ -378,26 +357,42 @@ class SaveManager:
         return serialized
 
     def deserialize_world(self, world_data, block_map):
-        """Convert serialized world data back to chunks"""
-        deserialized = {}
-        for ci_str, chunk_data in world_data.items():
-            ci = int(ci_str)
+        """Convert saved world data back into Block objects"""
+        world_chunks = {}
+        for chunk_id, chunk_data in world_data.items():
             chunk = []
             for row in chunk_data:
                 new_row = []
                 for block_data in row:
-                    if isinstance(block_data, dict):
-                        # Special block with saved state
-                        block_id = block_data['id']
-                        block = block_map[block_id].create_instance()
-                        block.from_dict(block_data, self.item_registry)
-                        new_row.append(block)
+                    # Special handling for AIR blocks
+                    if block_data == 0 or block_data == "0":
+                        new_row.append(REGISTRY.get_block("0"))  # Get AIR block from registry
+                        continue
+                        
+                    # Handle other blocks
+                    if isinstance(block_data, (str, int)):
+                        block = REGISTRY.get_block(str(block_data))
+                        if block:
+                            if hasattr(block, 'create_instance'):
+                                block = block.create_instance()
+                            new_row.append(block)
+                        else:
+                            new_row.append(REGISTRY.get_block("0"))  # Fallback to AIR if block not found
                     else:
-                        # Regular block
-                        new_row.append(block_map[block_data])
+                        # Handle complex blocks (Storage, Furnace, etc.)
+                        block_id = str(block_data.get('id'))
+                        block = REGISTRY.get_block(block_id)
+                        if block and hasattr(block, 'create_instance'):
+                            block_instance = block.create_instance()
+                            if hasattr(block_instance, 'from_dict'):
+                                block_instance.from_dict(block_data, REGISTRY.items)
+                            new_row.append(block_instance)
+                        else:
+                            new_row.append(REGISTRY.get_block("0"))  # Fallback to AIR if invalid
+
                 chunk.append(new_row)
-            deserialized[ci] = chunk
-        return deserialized
+            world_chunks[int(chunk_id)] = chunk
+        return world_chunks
 
     def load_all(self, block_map):
         """Load both world and player data"""

@@ -2,6 +2,7 @@ import pygame
 import config as c
 from item import Item  # assumed item module
 from block import BLOCK_MAP, AIR  # added import to get blocks
+from registry import REGISTRY  # Add this import
 
 class Inventory:
     def __init__(self):
@@ -10,11 +11,25 @@ class Inventory:
         self.main = [{"item": None, "quantity": 0} for _ in range(32)]
         self.selected_hotbar_index = 0
         self.player = None  # Add reference to player
-        # Prefill hotbar with block items (excluding AIR).
-        blocks = [blk for key, blk in sorted(BLOCK_MAP.items()) if blk != AIR]
-        # Limit to available hotbar slots (1-9).
-        for blk in blocks[:9]:
-            self.fill_empty_hotbar_slot(blk.item_variant, 64)
+        
+        # Initialize hotbar with blocks from registry
+        def fill_hotbar():
+            blocks_to_add = []
+            for block_id in sorted(BLOCK_MAP.keys()):
+                block = REGISTRY.get_block(str(block_id))
+                if block and block.id != 0 and hasattr(block, 'item_variant'):  # Skip AIR and ensure item variant exists
+                    blocks_to_add.append(block)
+                    if len(blocks_to_add) >= 9:  # Only need 9 blocks for hotbar
+                        break
+            
+            # Fill hotbar with collected blocks
+            for i, block in enumerate(blocks_to_add):
+                if i < 9 and block.item_variant:  # Double check item_variant exists
+                    self.hotbar[i] = {"item": block.item_variant, "quantity": 64}
+                    print(f"Added {block.name} to hotbar slot {i}")
+
+        # Fill hotbar with initial blocks
+        fill_hotbar()
 
     def set_player(self, player):
         """Set player reference for modifier updates"""
@@ -213,8 +228,19 @@ class Inventory:
                     screen.blit(quantity_text, (slot_x + slot_size - 20, slot_y + slot_size - 20))
 
     def refill_hotbar(self):
-        if not self.hotbar:
-            from block import BLOCK_MAP, AIR
-            blocks = [blk for key, blk in sorted(BLOCK_MAP.items()) if blk != AIR]
-            for blk in blocks[:9]:
-                self.fill_empty_hotbar_slot(blk.item_variant, 64)
+        """Refill empty hotbar with default blocks"""
+        if not any(slot and slot.get("item") for slot in self.hotbar):
+            # Get all blocks that have item variants
+            blocks = []
+            for block_id in sorted(BLOCK_MAP.keys()):
+                block = REGISTRY.get_block(str(block_id))
+                if block and block.id != 0 and hasattr(block, 'item_variant'):
+                    blocks.append(block)
+                    if len(blocks) >= 9:
+                        break
+            
+            # Fill hotbar with blocks
+            for i, block in enumerate(blocks):
+                if i < 9 and block.item_variant:
+                    self.hotbar[i] = {"item": block.item_variant, "quantity": 64}
+                    print(f"Refilled hotbar slot {i} with {block.name}")

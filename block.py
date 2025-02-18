@@ -1,8 +1,10 @@
-import importlib.util
-from pathlib import Path
-from item import Item, IRON_INGOT, GOLD_INGOT, COAL, MELTABLE_ITEMS, FUEL_ITEMS
+from item import Item, IRON_INGOT, GOLD_INGOT, COAL, MELTABLE_ITEMS, FUEL_ITEMS  # Add COAL to imports
 import pygame
 import config as c
+import pygame
+import config as c
+from block_loader import BlockLoader
+from registry import REGISTRY
 
 class Block:
     def __init__(self, id, name, solid, color, texture_coords, drop_item=None, animation_frames=None, frame_duration=0, tint=None, entity_type=None):
@@ -10,281 +12,378 @@ class Block:
         self.name = name
         self.solid = solid
         self.color = color
-        self.texture_coords = texture_coords
-        self.drop_item = drop_item
-        self.animation_frames = animation_frames
-        self.frame_duration = frame_duration
-        self.tint = tint
-        self.item_variant = None
-        self.entity_type = entity_type
-        self.script = None
-        self.type = "basic"
+        self.texture_coords = texture_coords  # (x, y) in the texture atlas
+        self.drop_item = drop_item  # Optional item drop
+        self.animation_frames = animation_frames  # List of (x, y) tuples for animation frames
+        self.frame_duration = frame_duration  # Duration of each frame in milliseconds
+        self.tint = tint  # Tint color to modify block appearance
+        self.item_variant = None  # New: will hold the corresponding item
+        self.entity_type = entity_type  # New: entity type to spawn
 
-        # Pre-create surfaces for performance
-        if tint:
-            self._tint_surface = pygame.Surface((16, 16), pygame.SRCALPHA)
-            self._tint_surface.fill((*tint, 128))
-        
-        # Initialize texture cache for animations
-        if animation_frames:
-            self._texture_cache = {}
-            self._anim_tick = 0
+    # NEW: Helper method to get the block texture with tint applied if set.
+    def get_texture(self, atlas):
+        # Special case for AIR - return None to indicate no texture
+        if self.id == 0:  # AIR block
+            return None
 
-    def create_base_instance(self):
-        return type(self)(
+        # Rest of texture handling for non-AIR blocks
+        if not hasattr(self, "_cached_base"):
+            block_size = c.BLOCK_SIZE
+            tx, ty = self.texture_coords
+            texture_rect = pygame.Rect(tx * block_size, ty * block_size, block_size, block_size)
+            self._cached_base = atlas.subsurface(texture_rect).convert_alpha()
+        if not self.tint:
+            return self._cached_base
+        if not hasattr(self, "_cached_texture"):
+            tinted = self._cached_base.copy()
+            tinted.fill(self.tint, special_flags=pygame.BLEND_RGBA_MULT)
+            self._cached_texture = tinted
+        return self._cached_texture
+
+    def create_instance(self):
+        """Create a new instance of the block"""
+        # Special case for AIR blocks
+        if self.id == 0:
+            return self  # Return the singleton AIR instance
+            
+        # For other blocks, create a new instance
+        new_block = Block(
             id=self.id,
             name=self.name,
             solid=self.solid,
             color=self.color,
             texture_coords=self.texture_coords,
+            drop_item=self.drop_item,
             animation_frames=self.animation_frames,
             frame_duration=self.frame_duration,
             tint=self.tint,
             entity_type=self.entity_type
         )
-
-    def create_instance(self):
-        new_block = self.create_base_instance()
-        if self.script:
-            new_block.script = self.script.__class__(new_block)
+        new_block.item_variant = self.item_variant
         return new_block
 
     def to_dict(self):
-        data = {
+        """Base serialization for blocks"""
+        return {
             'id': self.id,
             'name': self.name,
-            'type': self.type,
             'solid': self.solid,
-            'color': list(self.color),
-            'texture_coords': list(self.texture_coords)
+            'color': self.color,
+            'texture_coords': self.texture_coords,
+            'tint': self.tint,
+            'entity_type': self.entity_type
         }
-        
-        if self.script:
-            data['script_data'] = self.script.to_dict()
-            
-        if self.animation_frames:
-            data['animation_frames'] = [list(frame) for frame in self.animation_frames]
-            data['frame_duration'] = self.frame_duration
-        if self.tint:
-            data['tint'] = list(self.tint)
-        if self.entity_type:
-            data['entity_type'] = self.entity_type
-        if self.drop_item:
-            data['drop_item'] = self.drop_item
-            
-        return data
 
-    def from_dict(self, data, item_registry=None):
-        """Load block state from dictionary"""
-        for key, value in data.items():
-            if key == 'script_data' and self.script and hasattr(self.script, 'from_dict'):
-                self.script.from_dict(value, item_registry)
-            elif hasattr(self, key):
-                setattr(self, key, value)
-        return self
-
-    def get_texture(self, atlas):
-        """Get block texture with optimized caching"""
-        # Cache the texture coordinates
-        if self.animation_frames:
-            if not hasattr(self, '_anim_tick'):
-                self._anim_tick = 0
-                self._texture_cache = {}
-            
-            self._anim_tick += 1
-            frame_index = (self._anim_tick // self.frame_duration) % len(self.animation_frames)
-            tx, ty = self.animation_frames[frame_index]
-            
-            # Check cache for this frame
-            cache_key = (tx, ty)
-            if cache_key in self._texture_cache:
-                return self._texture_cache[cache_key]
-        else:
-            tx, ty = self.texture_coords
-            
-            # Use static texture cache
-            if hasattr(self, '_static_texture'):
-                return self._static_texture
-
-        # Get base texture
-        block_size = 16
-        texture_rect = pygame.Rect(tx * block_size, ty * block_size, block_size, block_size)
-        base_texture = atlas.subsurface(texture_rect).convert_alpha()
-        
-        # Apply tint if needed
-        if self.tint:
-            if not hasattr(self, '_tint_surface'):
-                self._tint_surface = pygame.Surface((block_size, block_size), pygame.SRCALPHA)
-                self._tint_surface.fill((*self.tint, 128))
-            
-            tinted = base_texture.copy()
-            tinted.blit(self._tint_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-            texture = tinted
-        else:
-            texture = base_texture
-
-        # Cache the result
-        if self.animation_frames:
-            self._texture_cache[cache_key] = texture
-            # Limit cache size
-            if len(self._texture_cache) > len(self.animation_frames):
-                self._texture_cache.clear()
-        else:
-            self._static_texture = texture
-
-        return texture
+    def from_dict(self, data, item_registry):
+        """Base deserialization for blocks"""
+        self.id = data.get('id', self.id)
+        self.name = data.get('name', self.name)
+        self.solid = data.get('solid', self.solid)
+        self.color = data.get('color', self.color)
+        self.texture_coords = data.get('texture_coords', self.texture_coords)
+        self.tint = data.get('tint', self.tint)
+        self.entity_type = data.get('entity_type', self.entity_type)
 
 class StorageBlock(Block):
-    def __init__(self, id, name, solid, color, texture_coords, **kwargs):
-        super().__init__(id, name, solid, color, texture_coords, **kwargs)
-        self.type = "storage"
+    def __init__(self, id, name, texture_coords, solid=True, color=(139, 69, 19), 
+                 drop_item=None, animation_frames=None, frame_duration=0, tint=None, entity_type=None):
+        super().__init__(id, name, solid, color, texture_coords, drop_item, 
+                        animation_frames, frame_duration, tint, entity_type)
         self.has_inventory = True
-        self.max_slots = 27
-        self.inventory = [None] * self.max_slots
         
-        # Load storage script
-        script_path = Path(__file__).parent / 'scripts' / 'blocks' / 'storage_block.py'
-        if script_path.exists():
-            spec = importlib.util.spec_from_file_location("storage_script", script_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            self.script = module.BlockScript(self)
+        # Import and create script right away
+        from scripts.blocks.storage_block import BlockScript
+        self.script = BlockScript(self)
+        # For backward compatibility
+        self.max_slots = self.script.max_slots
+        self.inventory = self.script.inventory
+
+    def create_instance(self):
+        """Create a new instance with its own inventory"""
+        new_block = StorageBlock(
+            id=self.id,
+            name=self.name,
+            texture_coords=self.texture_coords,
+            solid=self.solid,
+            color=self.color
+        )
+        # Ensure script is initialized
+        from scripts.blocks.storage_block import BlockScript
+        new_block.script = BlockScript(new_block)
+        new_block.max_slots = new_block.script.max_slots
+        new_block.inventory = new_block.script.inventory
+        new_block.item_variant = self.item_variant
+        new_block.drop_item = self.drop_item
+        return new_block
+
+    def to_dict(self):
+        """Serialize storage state"""
+        data = super().to_dict()
+        if self.script:
+            data.update({
+                'storage_data': self.script.to_dict()
+            })
+        return data
+
+    def from_dict(self, data, item_registry):
+        """Deserialize storage state"""
+        super().from_dict(data, item_registry)
+        if self.script and 'storage_data' in data:
+            self.script.from_dict(data['storage_data'], item_registry)
+            self.inventory = self.script.inventory  # Update compatibility reference
 
 class FurnaceBlock(Block):
-    def __init__(self, id, name, solid, color, texture_coords, **kwargs):
-        super().__init__(id, name, solid, color, texture_coords, **kwargs)
-        self.type = "furnace"
+    def __init__(self, id, name, texture_coords, solid=True, color=(100, 100, 100), 
+                 drop_item=None, animation_frames=None, frame_duration=0, tint=None, entity_type=None):
+        super().__init__(id=id, name=name, solid=solid, color=color, texture_coords=texture_coords,
+                        drop_item=drop_item, animation_frames=animation_frames, 
+                        frame_duration=frame_duration, tint=tint, entity_type=entity_type)
         self.has_inventory = True
-        self.fuel_slot = None
-        self.input_slot = None
-        self.output_slot = None
-        self.is_burning = False
-        self.burn_time_remaining = 0
-        self.melt_progress = 0
         
-        # Load furnace script
-        script_path = Path(__file__).parent / 'scripts' / 'blocks' / 'furnace_block.py'
-        if script_path.exists():
-            spec = importlib.util.spec_from_file_location("furnace_script", script_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            self.script = module.BlockScript(self)
+        # Import and create script right away
+        from scripts.blocks.furnace_block import BlockScript
+        self.script = BlockScript(self)
+        # Add these proxy properties to maintain compatibility
+        self._update_proxy_slots()
+
+    def _update_proxy_slots(self):
+        """Update proxy slots from script"""
+        self.input_slot = self.script.input_slot
+        self.fuel_slot = self.script.fuel_slot
+        self.output_slot = self.script.output_slot
+
+    def create_instance(self):
+        """Create a new instance of the furnace with its own inventory"""
+        new_block = FurnaceBlock(self.id, self.name, self.texture_coords)
+        # Ensure script is initialized
+        from scripts.blocks.furnace_block import BlockScript
+        new_block.script = BlockScript(new_block)
+        # Update proxy properties
+        new_block._update_proxy_slots()
+        new_block.item_variant = self.item_variant
+        new_block.drop_item = self.drop_item
+        return new_block
+
+    # Delegate all methods to script
+    def update(self, dt):
+        if self.script:
+            self.script.update(dt)
+            self._update_proxy_slots()  # Keep proxy slots in sync
+
+    def to_dict(self):
+        """Serialize furnace state"""
+        data = super().to_dict()
+        if self.script:
+            data.update({
+                'furnace_data': self.script.to_dict()  # Store script data in its own key
+            })
+        return data
+
+    def from_dict(self, data, item_registry):
+        """Deserialize furnace state"""
+        super().from_dict(data, item_registry)
+        if self.script and 'furnace_data' in data:
+            self.script.from_dict(data['furnace_data'], item_registry)
+            self._update_proxy_slots()
 
 class EnhancerBlock(Block):
-    def __init__(self, id, name, solid, color, texture_coords, **kwargs):
-        super().__init__(id, name, solid, color, texture_coords, **kwargs)
-        self.type = "enhancer"
+    def __init__(self, id, name, texture_coords, solid=True, color=(100, 50, 150), 
+                 drop_item=None, animation_frames=None, frame_duration=0, tint=None, entity_type=None):
+        super().__init__(id, name, solid, color, texture_coords, drop_item, 
+                        animation_frames, frame_duration, tint, entity_type)
         self.has_inventory = True
+        self.can_interact = True
         self.input_slot = None
         self.ingredient_slot = None
-        
-        # Load enhancer script
-        script_path = Path(__file__).parent / 'scripts' / 'blocks' / 'enhancer_block.py'
-        if script_path.exists():
-            spec = importlib.util.spec_from_file_location("enhancer_script", script_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            self.script = module.BlockScript(self)
+
+    def create_instance(self):
+        """Create a new instance of the enhancer with its own slots"""
+        new_block = EnhancerBlock(self.id, self.name, self.texture_coords)
+        new_block.input_slot = None
+        new_block.ingredient_slot = None
+        new_block.item_variant = self.item_variant  # Make sure this is copied
+        new_block.drop_item = self.drop_item  # Make sure this is copied
+        return new_block
+
+    def to_dict(self):
+        """Serialize enhancer data for saving"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'input_slot': self._slot_to_dict(self.input_slot),
+            'ingredient_slot': self._slot_to_dict(self.ingredient_slot)
+        }
+
+    def _slot_to_dict(self, slot):
+        if slot and slot.get('item'):
+            return {
+                'item_id': slot['item'].id,
+                'quantity': slot['quantity']
+            }
+        return None
+
+    def from_dict(self, data, item_registry):
+        """Deserialize enhancer data when loading"""
+        self.input_slot = self._dict_to_slot(data['input_slot'], item_registry)
+        self.ingredient_slot = self._dict_to_slot(data['ingredient_slot'], item_registry)
+
+    def _dict_to_slot(self, slot_data, item_registry):
+        if slot_data:
+            item = item_registry.get(slot_data['item_id'])
+            if item:
+                return {
+                    'item': item,
+                    'quantity': slot_data['quantity']
+                }
+        return None
 
 class FarmingBlock(Block):
-    def __init__(self, id, name, solid, color, texture_coords, **kwargs):
-        super().__init__(id, name, solid, color, texture_coords, **kwargs)
-        self.type = "farming"
+    def __init__(self, id, name, texture_coords, solid=True, color=(139, 69, 19), 
+                 drop_item=None, animation_frames=None, frame_duration=0, tint=None, entity_type=None):
+        super().__init__(id, name, solid, color, texture_coords, drop_item, 
+                        animation_frames, frame_duration, tint, entity_type)
+        self.has_inventory = True
+        self.can_interact = True
         self.plantable = True
-        self.plant = None
-        self.tilled = False
-        self.untilled_texture = texture_coords
-        self.tilled_texture = (13, 1)
-        
-        # Load farming script
-        script_path = Path(__file__).parent / 'scripts' / 'blocks' / 'farming_block.py'
-        if script_path.exists():
-            spec = importlib.util.spec_from_file_location("farming_script", script_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            self.script = module.BlockScript(self)
 
-# Keep original block definitions for backwards compatibility
-# These will eventually be replaced by the JSON system
-AIR = Block(0, "Air", False, (255, 255, 255), (0, 0))
-GRASS = Block(1, "Grass", True, (34, 139, 34), (1, 10))
-DIRT = Block(2, "Dirt", True, (139, 69, 19), (8, 5))
-STONE = Block(4, "Stone", True, (105, 105, 105), (19, 6))
-UNBREAKABLE = Block(8, "Unbreakable", True, (70, 70, 70), (4, 3))
-WATER = Block(9, "Water", False, (0, 191, 255), (3, 0), animation_frames=[(3, 1), (3, 0),(2, 1), (2, 0)], frame_duration=200)
-LIGHT = Block(10, "Light", True, (255, 255, 200), (14, 9))
-COAL_ORE = Block(16, "Coal Ore", True, (0, 0, 0), (1, 5))
-IRON_ORE = Block(17, "Iron Ore", True, (220, 220, 220), (0, 12))
-GOLD_ORE = Block(18, "Gold Ore", True, (255, 215, 0), (0, 10))
+    def create_instance(self):
+        """Create a new instance of the farming block"""
+        new_block = FarmingBlock(
+            self.id, 
+            self.name, 
+            self.texture_coords,
+            solid=self.solid,
+            color=self.color
+        )
+        new_block.item_variant = self.item_variant
+        new_block.drop_item = self.drop_item
+        return new_block
+
+# Update WOOD block creation with burn time
 WOOD = Block(19, "Wood", True, (139, 69, 19), (1, 13))
-LEAVES = Block(20, "Leaves", True, (34, 139, 34), (9, 12), 
-               animation_frames=[(9, 12), (10, 12), (11, 12), (12, 12)],
-               frame_duration=300, tint=(34, 139, 34))
-LEAVESGG = Block(21, "Leavesgg", True, (85, 170, 47), (9, 12),
-                 animation_frames=[(9, 12), (10, 12), (11, 12), (12, 12)],
-                 frame_duration=300, tint=(85, 170, 47))
+WOOD.burn_time = 1000  # Add burn time before registration
+
+# Update ensure_block_item_variants function
+def ensure_block_item_variants():
+    """Make sure all blocks have item variants and are registered"""
+    from item import Item, ITEM_REGISTRY, FUEL_ITEMS
+    for block in REGISTRY.blocks.values():
+        if not hasattr(block, 'item_variant') or block.item_variant is None:
+            # First check FUEL_ITEMS, then block's burn_time
+            burn_time = FUEL_ITEMS.get(block.id, 0)
+            if (burn_time == 0 and hasattr(block, 'burn_time')):
+                burn_time = block.burn_time
+            
+            print(f"Creating item for {block.name}, burn_time={burn_time}")
+            
+            item_variant = Item(
+                id=block.id,
+                name=block.name,
+                texture_coords=block.texture_coords,
+                stack_size=64,
+                is_block=True,
+                burn_time=burn_time
+            )
+            
+            # Ensure burn time is set on both item and block
+            block.burn_time = burn_time
+            item_variant.burn_time = burn_time
+            
+            item_variant.block = block
+            block.item_variant = item_variant
+            block.drop_item = item_variant
+            
+            # Register in both registries
+            REGISTRY.items[str(item_variant.id)] = item_variant
+            ITEM_REGISTRY[item_variant.id] = item_variant
+
+# Create and register predefined blocks before loader initialization
+AIR = Block(0, "Air", False, (0, 0, 0), None)  # Change texture_coords to None
+REGISTRY.register_block(AIR)  # Register AIR block first
+GRASS = Block(1, "Grass", True, (0, 255, 0), (1, 10))
+DIRT = Block(2, "Dirt", True, (139, 69, 19), (8, 5))
+STONE = Block(4, "Stone", True, (128, 128, 128), (19, 6))
+SAND = Block(30, "Sand", True, (238, 214, 175), (18, 5))
+SANDSTONE = Block(31, "Sandstone", True, (219, 211, 173), (18, 6))
+SNOW_GRASS = Block(32, "Snow Grass", True, (248, 248, 248), (3, 20))
+SNOW_DIRT = Block(33, "Snow Dirt", True, (225, 225, 225), (8, 5))
+
+# Add these blocks after the existing predefined blocks but before registry
+LEAVES = Block(20, "Leaves", True, (34, 139, 34), (9, 12))
+LEAVESGG = Block(21, "Golden Leaves", True, (218, 165, 32), (9, 12))
+SAVANNA_GRASS = Block(34, "Savanna Grass", True, (189, 188, 107), (8, 6))
+SAVANNA_DIRT = Block(35, "Savanna Dirt", True, (150, 120, 60), (8, 5))
+UNBREAKABLE = Block(8, "Unbreakable", True, (50, 50, 50), (4, 3))  # Add this line
+WATER = Block(9, "Water", False, (64, 64, 255, 128), (3, 0), tint=(64, 64, 255, 128))  # Add water with transparency
+LIGHT = Block(10, "Light", False, (255, 255, 200), (14, 9), tint=(255, 255, 200, 128))   # Add light with glow effect
+
+# Add ore blocks
+COAL_ORE = Block(16, "Coal Ore", True, (47, 44, 54), (1, 5))
+IRON_ORE = Block(17, "Iron Ore", True, (136, 132, 132), (0, 12))
+GOLD_ORE = Block(18, "Gold Ore", True, (204, 172, 0), (0, 10))
+
+# Add special blocks
 SPAWNER = Block(22, "Spawner", True, (255, 0, 0), (5, 5), entity_type="mob")
-STORAGE = StorageBlock(23, "Storage", True, (139, 69, 19), (15, 1))
-FURNACE = FurnaceBlock(24, "Furnace", True, (100, 100, 100), (16, 1))
-FARMLAND = FarmingBlock(25, "Farmland", True, (139, 69, 19), (13, 0))
-ENHANCER = EnhancerBlock(50, "Enhancer", True, (100, 50, 150), (17, 1))
+STORAGE = StorageBlock(23, "Storage", (15, 1))
+FURNACE = FurnaceBlock(
+    id=24,
+    name="Furnace", 
+    texture_coords=(16, 1),
+    solid=True,
+    color=(100, 100, 100)
+)
+FARMLAND = FarmingBlock(25, "Farmland", (13, 0), True, (101, 67, 33))  # Fix this line
+ENHANCER = EnhancerBlock(50, "Enhancer", (17, 1))
 
-SAND = Block(30, "Sand", True, (194, 178, 128), (18, 5))
-SANDSTONE = Block(31, "Sandstone", True, (219, 211, 160), (18, 6))
-SNOW_GRASS = Block(32, "Snowy Grass", True, (200, 200, 200), (3, 10), tint=(200, 200, 200))
-SNOW_DIRT = Block(33, "Frozen Dirt", True, (150, 150, 150), (8, 5), tint=(200, 200, 200))
-SAVANNA_GRASS = Block(34, "Savanna Grass", True, (169, 178, 37), (8, 6), tint=(169, 178, 37))
-SAVANNA_DIRT = Block(35, "Savanna Dirt", True, (130, 100, 60), (8, 5), tint=(169, 178, 37))
+# Register blocks in registry
+for block in [AIR, GRASS, DIRT, STONE, SAND, SANDSTONE, SNOW_GRASS, SNOW_DIRT,
+              WOOD, LEAVES, LEAVESGG, SAVANNA_GRASS, SAVANNA_DIRT, UNBREAKABLE,  # Add UNBREAKABLE here
+              WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE,  # Add ore blocks here
+              SPAWNER, STORAGE, FURNACE, FARMLAND, ENHANCER]:  # Add special blocks here
+    REGISTRY.register_block(block)
 
-# Create item variants for blocks
-wood_item = Item(19, "Wood", WOOD.texture_coords, stack_size=64, is_block=True, burn_time=1000)
-wood_item.block = WOOD
-WOOD.item_variant = wood_item
-WOOD.drop_item = wood_item
+# Initialize block loader after predefined blocks are registered
+BLOCK_LOADER = BlockLoader()
 
-for blk in [GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT, COAL_ORE, IRON_ORE, GOLD_ORE,
-            LEAVES, LEAVESGG, SPAWNER, SAND, SANDSTONE, SNOW_GRASS, SNOW_DIRT, 
-            SAVANNA_GRASS, SAVANNA_DIRT]:
-    item_variant = Item(blk.id, blk.name, blk.texture_coords, stack_size=64, is_block=True)
-    item_variant.block = blk
-    blk.item_variant = item_variant
-    blk.drop_item = item_variant
-    
-    if blk == IRON_ORE:
-        item_variant.melt_result = IRON_INGOT
-    elif blk == GOLD_ORE:
-        item_variant.melt_result = GOLD_INGOT
-    elif blk == COAL_ORE:
-        item_variant.melt_result = COAL
+# Load JSON blocks
+BLOCK_LOADER.load_blocks()
 
-# Create special block items
-storage_item = Item(23, "Storage", STORAGE.texture_coords, stack_size=64, is_block=True)
-storage_item.block = STORAGE
-STORAGE.item_variant = storage_item
-STORAGE.drop_item = storage_item
+# Ensure all blocks have item variants
+ensure_block_item_variants()
 
-furnace_item = Item(24, "Furnace", FURNACE.texture_coords, stack_size=64, is_block=True)
-furnace_item.block = FURNACE
-FURNACE.item_variant = furnace_item
-FURNACE.drop_item = furnace_item
-
-enhancer_item = Item(50, "Enhancer", ENHANCER.texture_coords, stack_size=64, is_block=True)
-enhancer_item.block = ENHANCER
-ENHANCER.item_variant = enhancer_item
-ENHANCER.drop_item = enhancer_item
-
-farmland_item = Item(25, "Farmland", FARMLAND.texture_coords, stack_size=64, is_block=True)
-farmland_item.block = FARMLAND
-FARMLAND.item_variant = farmland_item
-FARMLAND.drop_item = farmland_item
-
-# Block mapping populated with original blocks for now
+# Create backward compatibility mappings
+BLOCK_TYPES = REGISTRY.blocks
 BLOCK_MAP = {
-    block.id: block for block in [
-        AIR, GRASS, DIRT, STONE, UNBREAKABLE, WATER, LIGHT,
-        COAL_ORE, IRON_ORE, GOLD_ORE, WOOD, LEAVES, LEAVESGG,
-        SPAWNER, STORAGE, FURNACE, FARMLAND, ENHANCER,
-        SAND, SANDSTONE, SNOW_GRASS, SNOW_DIRT,
-        SAVANNA_GRASS, SAVANNA_DIRT
-    ]
+    0: "AIR",
+    1: "GRASS", 
+    2: "DIRT",
+    4: "STONE",  # Note: ID changed to 4
+    8: "UNBREAKABLE",
+    9: "WATER",
+    10: "LIGHT",
+    16: "COAL_ORE",
+    17: "IRON_ORE",
+    18: "GOLD_ORE",
+    19: "WOOD",    # Add correct ID for WOOD
+    20: "LEAVES",  # Add correct ID for LEAVES
+    21: "LEAVESGG",
+    22: "SPAWNER",
+    23: "STORAGE",
+    24: "FURNACE",
+    25: "FARMLAND",
+    30: "SAND",    # Update to match block definition
+    31: "SANDSTONE",
+    32: "SNOW_GRASS",
+    33: "SNOW_DIRT",
+    34: "SAVANNA_GRASS",
+    35: "SAVANNA_DIRT",
+    50: "ENHANCER"
 }
+
+# Update __all__ to include new blocks
+__all__ = ['Block', 'StorageBlock', 'FurnaceBlock', 'EnhancerBlock', 'FarmingBlock',
+           'AIR', 'GRASS', 'DIRT', 'STONE', 'SAND', 'SANDSTONE', 'SNOW_GRASS', 'SNOW_DIRT',
+           'WOOD', 'LEAVES', 'LEAVESGG', 'SAVANNA_GRASS', 'SAVANNA_DIRT', 'UNBREAKABLE',  # Add UNBREAKABLE here
+           'WATER', 'LIGHT', 'COAL_ORE', 'IRON_ORE', 'GOLD_ORE',  # Add ore blocks
+           'SPAWNER', 'STORAGE', 'FURNACE', 'FARMLAND', 'ENHANCER',  # Add special blocks here
+           'BLOCK_TYPES', 'BLOCK_LOADER', 'BLOCK_MAP']

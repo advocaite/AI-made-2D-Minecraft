@@ -130,16 +130,9 @@ class ItemScript:
         return data
 
     def create_item(self, item_id, data, category):
-        """Create an item based on its category"""
+        """Create an item instance with proper attributes"""
         try:
-            from item import Item
-            
-            # Convert all keys to strings
-            data = {str(k): v for k, v in data.items()}
-            
-            # Ensure coordinates are integers
-            if 'texture_coords' in data:
-                data['texture_coords'] = [int(x) for x in data['texture_coords']]
+            from item import Item, ITEM_REGISTRY, MELTABLE_ITEMS
             
             # Create base item
             item = Item(
@@ -149,37 +142,18 @@ class ItemScript:
                 stack_size=int(data.get('stack_size', 64))
             )
             
-            # Apply category-specific properties
-            if category == "weapon":
-                item.type = "weapon"
-                item.modifiers = data.get("modifiers", {})
-            elif category == "tool":
-                item.type = "tool"
-                item.effective_against = data.get("effective_against", [])
-                item.modifiers = data.get("modifiers", {})
-            elif category == "armor":
-                item.type = "armor"
-                item.is_armor = True
-                item.modifiers = data.get("modifiers", {})
-            elif category == "consumable":
-                item.consumable_type = data.get("consumable_type")
-                effects = data.get("effects", {})
-                for effect, value in effects.items():
-                    setattr(item, effect, value)
-            elif category == "seed":
-                item.is_seed = True
-                item.plant_data = data.get("plant_data")
-
-            # Add burn time if specified
+            # Handle melt results from block data
+            if "melt_result" in data:
+                result_name = data["melt_result"]
+                if result_name in ITEM_REGISTRY:
+                    result_item = ITEM_REGISTRY[result_name]
+                    MELTABLE_ITEMS[item.id] = result_item
+                    print(f"Added melt result for {item.name}: {result_item.name}")
+            
+            # Apply burn time if specified
             if "burn_time" in data:
                 item.burn_time = data["burn_time"]
-
-            # Apply custom script if available
-            if "script" in data:
-                script_class = self.load_script(data["script"])
-                if script_class:
-                    item.script = script_class(item)
-
+            
             return item
             
         except Exception as e:

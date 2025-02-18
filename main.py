@@ -713,9 +713,11 @@ def main():
                 continue
             for y, row in enumerate(chunk):
                 for x, block_obj in enumerate(row):
+                    # Skip AIR blocks and blocks that return None textures
                     if block_obj != b.AIR:
                         texture = block_obj.get_texture(texture_atlas)
-                        screen.blit(texture, (chunk_x_offset + x * block_size, y * block_size - cam_offset_y))
+                        if texture:  # Only blit if texture exists
+                            screen.blit(texture, (chunk_x_offset + x * block_size, y * block_size - cam_offset_y))
         
         # Render world items
         for world_item in world_items:
@@ -851,4 +853,13 @@ def main():
         
 if __name__ == "__main__":
     main()
+
+def draw_block(block, x, y):
+    # Skip rendering if it's an air block
+    if block.id == 0:  # AIR block
+        return
+        
+    texture = block.get_texture(texture_atlas)
+    if texture:  # Only draw if texture exists
+        screen.blit(texture, (x, y))
 

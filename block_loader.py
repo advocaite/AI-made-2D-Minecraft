@@ -2,11 +2,10 @@ import json
 import jsonschema
 from pathlib import Path
 import importlib.util
-from block import Block, StorageBlock, FurnaceBlock, EnhancerBlock, FarmingBlock
+from registry import REGISTRY
 
 class BlockLoader:
     def __init__(self):
-        self.blocks = {}
         self.base_dir = Path(__file__).parent
         self.data_dir = self.base_dir / 'data' / 'blocks'
         self.schema_path = self.base_dir / 'data' / 'schemas' / 'block_schema.json'
@@ -17,6 +16,8 @@ class BlockLoader:
         # Load schema
         with open(self.schema_path) as f:
             self.schema = json.load(f)
+        
+        self.blocks = {}  # Add this line to store blocks locally
 
     def load_script(self, script_path):
         """Load a block script from file"""
@@ -35,42 +36,40 @@ class BlockLoader:
 
     def create_block(self, block_data):
         """Create a block instance with item variant"""
+        # Import here to avoid circular imports
+        from block import Block, StorageBlock, FurnaceBlock, EnhancerBlock, FarmingBlock
+        
         block_type = block_data.get('type', 'basic')
         
-        # Map of block types to their classes
-        block_classes = {
+        # Common arguments for all block types
+        common_args = {
+            'id': block_data['id'],
+            'name': block_data['name'],
+            'solid': block_data.get('solid', True),
+            'color': tuple(block_data.get('color', (255, 255, 255))),
+            'texture_coords': tuple(block_data['texture_coords']),
+            'drop_item': None,  # This will be set later with item variant
+            'animation_frames': [tuple(frame) for frame in block_data.get('animation_frames', [])] if block_data.get('animation_frames') else None,
+            'frame_duration': block_data.get('frame_duration', 0),
+            'tint': tuple(block_data.get('tint', ())) if block_data.get('tint') else None,
+            'entity_type': block_data.get('entity_type')
+        }
+
+        # Create block based on type
+        BlockClass = {
             'basic': Block,
             'storage': StorageBlock,
             'furnace': FurnaceBlock,
             'enhancer': EnhancerBlock,
             'farming': FarmingBlock
-        }
+        }.get(block_type, Block)
         
-        BlockClass = block_classes.get(block_type, Block)
+        block = BlockClass(**common_args)
         
-        # Create block instance with basic properties
-        block = BlockClass(
-            id=block_data['id'],
-            name=block_data['name'],
-            solid=block_data['solid'],
-            color=tuple(block_data.get('color', (255, 255, 255))),
-            texture_coords=tuple(block_data['texture_coords']),
-            animation_frames=[tuple(frame) for frame in block_data.get('animation_frames', [])] if block_data.get('animation_frames') else None,
-            frame_duration=block_data.get('frame_duration', 0),
-            tint=tuple(block_data.get('tint', ())) if block_data.get('tint') else None,
-            entity_type=block_data.get('entity_type')
-        )
+        # Store block in local registry
+        self.blocks[str(block.id)] = block
         
-        # Add additional properties directly to block instance
-        if 'burn_time' in block_data:
-            block.burn_time = block_data['burn_time']
-        
-        # Load script if specified
-        if script_path := block_data.get('script'):
-            if script_class := self.load_script(script_path):
-                block.script = script_class(block)
-        
-        # Create item variant for the block
+        # Always create item variant
         from item import Item
         item_variant = Item(
             id=block.id,
@@ -86,25 +85,36 @@ class BlockLoader:
 
         return block
 
+    def register_predefined_block(self, block):
+        """Register a predefined block in the loader"""
+        self.blocks[str(block.id)] = block
+        return block
+
     def load_blocks(self):
         """Load all block definitions from JSON files"""
+        result = {}
         for json_file in self.data_dir.glob("*.json"):
             try:
                 with open(json_file, encoding='utf-8') as f:
                     blocks_data = json.load(f)
                     
                 for block_id, block_data in blocks_data.items():
-                    # Validate against schema
-                    jsonschema.validate(instance=block_data, schema=self.schema)
-                    
-                    # Create block instance
-                    block = self.create_block(block_data)
-                    self.blocks[block_id] = block
+                    # Convert BLOCK_MAP style keys to actual blocks
+                    if isinstance(block_data, str):
+                        block = REGISTRY.get_block(block_id)
+                        if block:
+                            result[str(block_id)] = block
+                            continue
+                            
+                    if str(block_id) not in REGISTRY.blocks:
+                        jsonschema.validate(instance=block_data, schema=self.schema)
+                        block = self.create_block(block_data)
+                        result[str(block_id)] = block
                     
             except Exception as e:
                 print(f"Error loading {json_file}: {e}")
 
-        return self.blocks
+        return result
 
     def save_blocks(self):
         """Save all blocks back to their respective files"""

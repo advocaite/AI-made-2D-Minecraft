@@ -23,6 +23,17 @@ class FurnaceUI:
         furnace_y_offset = 50  # Move furnace section up near top of screen
         furnace_section_width = self.slot_size * 4  # Total width of furnace section
 
+        # Calculate furnace background rectangle
+        furnace_padding = 20
+        furnace_width = self.slot_size * 5  # Width to encompass all slots
+        furnace_height = self.slot_size * 3  # Height to encompass all slots
+        self.furnace_rect = pygame.Rect(
+            screen_center_x - furnace_width//2,
+            furnace_y_offset - furnace_padding,
+            furnace_width,
+            furnace_height + furnace_padding * 2
+        )
+
         # Calculate furnace slot positions (centered at top)
         self.input_rect = pygame.Rect(
             screen_center_x - self.slot_size - 50,
@@ -81,34 +92,35 @@ class FurnaceUI:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_pos = pygame.mouse.get_pos()
             clicked_slot = self.get_slot_at_pos(mouse_pos)
-            
-            print(f"DEBUG: Clicked at {mouse_pos}, slot: {clicked_slot}")
+            print("\n=== DRAG START ===")
+            print(f"Mouse position: {mouse_pos}")
+            print(f"Clicked slot: {clicked_slot}")
             
             if clicked_slot:
                 slot_type, slot = clicked_slot
-                print(f"DEBUG: Checking slot type: {slot_type}, index: {slot}")
-
-                # Handle hotbar slots first
-                if slot_type == "hotbar":
-                    if 0 <= slot < len(self.player_inventory.hotbar):
-                        if self.player_inventory.hotbar[slot] and self.player_inventory.hotbar[slot].get("item"):
-                            self.dragging_item = dict(self.player_inventory.hotbar[slot])
-                            self.player_inventory.hotbar[slot] = {"item": None, "quantity": 0}
-                            self.drag_source = ("hotbar", slot)
-                            print(f"DEBUG: Picked up from hotbar: {self.dragging_item}")
-                            return
+                print(f"Slot contents before pickup:")
+                if slot_type == "fuel":
+                    print(f"Fuel slot: {self.furnace.script.fuel_slot}")
+                elif slot_type == "input":
+                    print(f"Input slot: {self.furnace.script.input_slot}")
+                elif slot_type == "output":
+                    print(f"Output slot: {self.furnace.script.output_slot}")
+                elif slot_type == "inventory":
+                    print(f"Inventory slot {slot}: {self.player_inventory.main[slot]}")
+                elif slot_type == "hotbar":
+                    print(f"Hotbar slot {slot}: {self.player_inventory.hotbar[slot]}")
 
                 # Get item from source with deep copy
                 source_item = None
-                if slot_type == "input" and self.furnace.input_slot and self.furnace.input_slot.get("item"):
-                    source_item = dict(self.furnace.input_slot)
-                    self.furnace.input_slot = {"item": None, "quantity": 0}
-                elif slot_type == "fuel" and self.furnace.fuel_slot and self.furnace.fuel_slot.get("item"):
-                    source_item = dict(self.furnace.fuel_slot)
-                    self.furnace.fuel_slot = {"item": None, "quantity": 0}
-                elif slot_type == "output" and self.furnace.output_slot and self.furnace.output_slot.get("item"):
-                    source_item = dict(self.furnace.output_slot)
-                    self.furnace.output_slot = {"item": None, "quantity": 0}
+                if slot_type == "input":
+                    source_item = dict(self.furnace.script.input_slot)  # Use script
+                    self.furnace.script.input_slot = {"item": None, "quantity": 0}
+                elif slot_type == "fuel":
+                    source_item = dict(self.furnace.script.fuel_slot)  # Use script
+                    self.furnace.script.fuel_slot = {"item": None, "quantity": 0}
+                elif slot_type == "output":
+                    source_item = dict(self.furnace.script.output_slot)  # Use script
+                    self.furnace.script.output_slot = {"item": None, "quantity": 0}
                 elif slot_type == "inventory":
                     if 0 <= slot < len(self.player_inventory.main):
                         slot_data = self.player_inventory.main[slot]
@@ -129,9 +141,24 @@ class FurnaceUI:
 
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             if self.dragging_item and self.dragging_item.get("item"):
+                print("\n=== DROP ATTEMPT ===")
+                print(f"Dragging item: {self.dragging_item}")
                 mouse_pos = pygame.mouse.get_pos()
                 target_slot = self.get_slot_at_pos(mouse_pos)
+                print(f"Target slot: {target_slot}")
                 
+                if target_slot:
+                    slot_type, slot = target_slot
+                    target_contents = self.get_slot_contents(slot_type, slot)
+                    print(f"Target contents: {target_contents}")
+                    
+                    # Additional debug for fuel slot
+                    if slot_type == "fuel":
+                        item = self.dragging_item.get("item")
+                        print(f"Item being dropped: {item.name if item else None}")
+                        print(f"Item burn time: {getattr(item, 'burn_time', None) if item else None}")
+                        print(f"Is fuel?: {hasattr(item, 'burn_time') if item else False}")
+
                 if not target_slot:
                     print("DEBUG: No target slot, returning to source")
                     self.return_to_source()
@@ -142,33 +169,27 @@ class FurnaceUI:
                     target_item = self.get_slot_contents(slot_type, slot)
                     print(f"DEBUG: Target contains: {target_item}")
 
+                    # Check if item can be placed in furnace slots
+                    if slot_type == "fuel" and not hasattr(self.dragging_item["item"], "burn_time"):
+                        print("DEBUG: Cannot place non-fuel item in fuel slot")
+                        self.return_to_source()
+                        self.dragging_item = None
+                        self.drag_source = None
+                        return
+
+                    # Place or swap items
                     if not target_item or not target_item.get("item"):
-                        # Place in empty slot
-                        if slot_type == "fuel" and not hasattr(self.dragging_item["item"], "burn_time"):
-                            print("DEBUG: Cannot place non-fuel item in fuel slot")
-                            self.return_to_source()
-                        else:
-                            dragged_copy = {"item": self.dragging_item["item"], "quantity": self.dragging_item["quantity"]}
-                            self.place_item(slot_type, slot, dragged_copy)
-                            print(f"DEBUG: Placed item in {slot_type} slot {slot}")
-                            self.dragging_item = None
+                        dragged_copy = {"item": self.dragging_item["item"], "quantity": self.dragging_item["quantity"]}
+                        self.place_item(slot_type, slot, dragged_copy)
+                        self.dragging_item = None
                     else:
                         # Handle stacking or swapping
                         if target_item["item"].id == self.dragging_item["item"].id:
-                            total = target_item["quantity"] + self.dragging_item["quantity"]
-                            stack_size = target_item["item"].stack_size
-                            if total <= stack_size:
-                                target_item["quantity"] = total
-                                self.dragging_item = None
-                                print(f"DEBUG: Stacked items, new quantity: {total}")
-                            else:
-                                target_item["quantity"] = stack_size
-                                self.dragging_item["quantity"] = total - stack_size
-                                print(f"DEBUG: Partial stack, remaining: {self.dragging_item['quantity']}")
+                            self.handle_stacking(slot_type, slot, target_item)
                         else:
                             # Swap items
-                            temp = {"item": target_item["item"], "quantity": target_item["quantity"]}
-                            self.place_item(slot_type, slot, self.dragging_item)
+                            temp = dict(target_item)  # Make a copy of target item
+                            self.place_item(slot_type, slot, dict(self.dragging_item))
                             self.dragging_item = temp
                             print("DEBUG: Swapped items")
 
@@ -178,14 +199,23 @@ class FurnaceUI:
                 self.dragging_item = None
                 self.drag_source = None
 
+                print("\n=== AFTER DROP ===")
+                if target_slot:
+                    slot_type, slot = target_slot
+                    if slot_type == "fuel":
+                        print(f"Fuel slot after: {self.furnace.script.fuel_slot}")
+                    elif slot_type == "input":
+                        print(f"Input slot after: {self.furnace.script.input_slot}")
+                    print(f"Dragging item after: {self.dragging_item}")
+
     def get_slot_contents(self, slot_type, slot):
         """Helper method to get contents of a slot"""
         if slot_type == "input":
-            return self.furnace.input_slot
+            return self.furnace.script.input_slot  # Use script
         elif slot_type == "fuel":
-            return self.furnace.fuel_slot
+            return self.furnace.script.fuel_slot   # Use script
         elif slot_type == "output":
-            return self.furnace.output_slot
+            return self.furnace.script.output_slot # Use script
         elif slot_type == "inventory":
             return self.player_inventory.main[slot]
         elif slot_type == "hotbar":
@@ -215,28 +245,36 @@ class FurnaceUI:
 
     def place_item(self, slot_type, slot, item):
         """Place a deep copy of the item in the target slot"""
+        print(f"\n=== PLACING ITEM ===")
+        print(f"Slot type: {slot_type}")
+        print(f"Item being placed: {item}")
+        
         item_copy = {"item": item["item"], "quantity": item["quantity"]}
-        if slot_type == "input":
-            self.furnace.input_slot = item_copy
-        elif slot_type == "fuel":
-            self.furnace.fuel_slot = item_copy
+        
+        if slot_type == "fuel":
+            print(f"Placing in fuel slot. Item burn time: {getattr(item['item'], 'burn_time', None)}")
+            self.furnace.script.fuel_slot = item_copy
+            print(f"Fuel slot after placement: {self.furnace.script.fuel_slot}")
+        elif slot_type == "input":
+            self.furnace.script.input_slot = item_copy
         elif slot_type == "output":
-            self.furnace.output_slot = item_copy
+            self.furnace.script.output_slot = item_copy
         elif slot_type == "inventory":
             self.player_inventory.main[slot] = item_copy
         elif slot_type == "hotbar":
             self.player_inventory.hotbar[slot] = item_copy
+
         print(f"DEBUG: Placed {item_copy['quantity']} {item_copy['item'].name} in {slot_type} slot {slot}")
 
     def return_to_source(self):
         if self.drag_source:
             source_type, slot = self.drag_source
             if source_type == "input":
-                self.furnace.input_slot = self.dragging_item
+                self.furnace.script.input_slot = self.dragging_item   # Use script
             elif source_type == "fuel":
-                self.furnace.fuel_slot = self.dragging_item
+                self.furnace.script.fuel_slot = self.dragging_item    # Use script
             elif source_type == "output":
-                self.furnace.output_slot = self.dragging_item
+                self.furnace.script.output_slot = self.dragging_item  # Use script
             elif source_type == "inventory":
                 self.player_inventory.main[slot] = self.dragging_item
             elif source_type == "hotbar":
@@ -251,16 +289,16 @@ class FurnaceUI:
         # Check furnace slots first
         if self.input_rect.collidepoint(pos):
             slot_info = ("input", None)
-            if self.furnace.input_slot and self.furnace.input_slot.get("item"):
-                self.hovered_item = self.furnace.input_slot["item"]
+            if self.furnace.script.input_slot and self.furnace.script.input_slot.get("item"):  # Use script
+                self.hovered_item = self.furnace.script.input_slot["item"]
         elif self.fuel_rect.collidepoint(pos):
             slot_info = ("fuel", None)
-            if self.furnace.fuel_slot and self.furnace.fuel_slot.get("item"):
-                self.hovered_item = self.furnace.fuel_slot["item"]
+            if self.furnace.script.fuel_slot and self.furnace.script.fuel_slot.get("item"):    # Use script
+                self.hovered_item = self.furnace.script.fuel_slot["item"]
         elif self.output_rect.collidepoint(pos):
             slot_info = ("output", None)
-            if self.furnace.output_slot and self.furnace.output_slot.get("item"):
-                self.hovered_item = self.furnace.output_slot["item"]
+            if self.furnace.script.output_slot and self.furnace.script.output_slot.get("item"): # Use script
+                self.hovered_item = self.furnace.script.output_slot["item"]
 
         # Check main inventory slots
         if not slot_info:
@@ -305,6 +343,43 @@ class FurnaceUI:
             self.swap_items(slot_type, slot, dict(target_item))
 
     def draw(self):
+        """Draw the furnace UI"""
+        # Draw UI background
+        self.screen.fill((30, 30, 30))
+        overlay = pygame.Surface((c.SCREEN_WIDTH, c.SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))
+        self.screen.blit(overlay, (0, 0))
+
+        # Draw furnace interface
+        pygame.draw.rect(self.screen, (139, 69, 19), self.furnace_rect)
+        pygame.draw.rect(self.screen, (101, 67, 33), self.furnace_rect, 2)
+
+        # Draw slots
+        slots = [
+            (self.input_rect, self.furnace.script.input_slot),
+            (self.fuel_rect, self.furnace.script.fuel_slot),
+            (self.output_rect, self.furnace.script.output_slot)
+        ]
+
+        for rect, slot in slots:
+            # Draw slot background
+            pygame.draw.rect(self.screen, (50, 50, 50), rect)
+            pygame.draw.rect(self.screen, (100, 100, 100), rect, 1)
+            
+            # Draw item in slot if present
+            if slot and slot.get("item"):
+                item = slot["item"]
+                tx, ty = item.texture_coords
+                texture_rect = pygame.Rect(tx * c.BLOCK_SIZE, ty * c.BLOCK_SIZE, c.BLOCK_SIZE, c.BLOCK_SIZE)
+                item_texture = self.atlas.subsurface(texture_rect)  # Changed from self.texture_atlas to self.atlas
+                scaled_texture = pygame.transform.scale(item_texture, (self.slot_size-8, self.slot_size-8))
+                self.screen.blit(scaled_texture, (rect.x+4, rect.y+4))
+                
+                # Draw quantity if more than 1
+                if slot["quantity"] > 1:
+                    quantity_text = self.font.render(str(slot["quantity"]), True, (255, 255, 255))
+                    self.screen.blit(quantity_text, (rect.x + rect.width - 20, rect.y + rect.height - 20))
+
         # Get current mouse position and update hovered item at start of draw
         mouse_pos = pygame.mouse.get_pos()
         self.get_slot_at_pos(mouse_pos)  # This updates self.hovered_item
@@ -348,14 +423,14 @@ class FurnaceUI:
                     self.screen.blit(quantity, (rect.right - quantity.get_width() - 5, rect.bottom - quantity.get_height() - 5))
 
         # Draw progress indicators if furnace is burning
-        if self.furnace.is_burning:
-            burn_height = int((self.furnace.burn_time_remaining / 1000) * self.slot_size)
+        if self.furnace.script.is_burning:
+            burn_height = int((self.furnace.script.burn_time_remaining / 1000) * self.slot_size)
             burn_rect = pygame.Rect(self.fuel_rect.right + 10, 
                                   self.fuel_rect.bottom - burn_height,
                                   10, burn_height)
             pygame.draw.rect(self.screen, (255, 128, 0), burn_rect)
 
-            melt_width = int((self.furnace.melt_progress / 1000) * (self.output_rect.left - self.input_rect.right - 20))
+            melt_width = int((self.furnace.script.melt_progress / 1000) * (self.output_rect.left - self.input_rect.right - 20))
             melt_rect = pygame.Rect(self.input_rect.right + 10,
                                   self.input_rect.centery - 5,
                                   melt_width, 10)

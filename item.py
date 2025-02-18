@@ -5,7 +5,17 @@ class Item:
     def __init__(self, id, name, texture_coords, stack_size=64, is_block=False, **kwargs):
         self.id = id
         self.name = name
-        self.texture_coords = texture_coords
+        # Validate texture coordinates
+        if texture_coords is None:
+            self.texture_coords = (0, 0)  # Default texture coordinates
+            print(f"Warning: No texture coordinates provided for item {name}, using default (0,0)")
+        else:
+            try:
+                x, y = texture_coords
+                self.texture_coords = (int(x), int(y))
+            except (TypeError, ValueError):
+                self.texture_coords = (0, 0)
+                print(f"Warning: Invalid texture coordinates for item {name}, using default (0,0)")
         self.stack_size = stack_size
         self.is_block = is_block
         self.is_armor = False
@@ -96,8 +106,9 @@ MELTABLE_ITEMS = {
     16: COAL        # Coal Ore -> Coal
 }
 
+# Update FUEL_ITEMS dictionary
 FUEL_ITEMS = {
-    19: 1000,     # Wood burns for 1 second
+    19: 1000,     # Wood burns for 1 second (1000ms)
     202: 2000     # Coal burns for 2 seconds
 }
 

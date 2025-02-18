@@ -7,7 +7,7 @@
         "color": [0, 0, 0],
         "texture_coords": [1, 5],
         "drop_item": "COAL",
-        "mine_level": 1
+        "melt_result": "COAL"
     },
     "IRON_ORE": {
         "id": 17,

@@ -8,7 +8,7 @@ class InventoryUI:
         self.screen = screen
         self.inventory = inventory
         self.atlas = atlas
-        self.slot_size = 50
+        self.slot_size = 50  # Changed from 40 to 50 to match hotbar
         self.padding = 10
         self.font = pygame.font.SysFont(None, 24)
         self.running = True
@@ -23,6 +23,8 @@ class InventoryUI:
         # Add tooltip support
         self.tooltip = Tooltip(self.font)
         self.hovered_item = None
+        self.selected_slot = None  # Add this line to initialize selected_slot
+        self.texture_atlas = atlas  # Add this line to fix texture_atlas reference
 
     def can_equip_in_armor_slot(self, item, slot_index):
         """Check if an item can be equipped in the given armor slot"""
@@ -50,30 +52,45 @@ class InventoryUI:
             return item.type in slot_requirements[slot_index]
         return False
 
-    def draw_grid(self, container, top_left, columns):
-        x0, y0 = top_left
-        for idx, slot in enumerate(container):
-            col = idx % columns
-            row = idx // columns
-            x = x0 + col * (self.slot_size + self.padding)
-            y = y0 + row * (self.slot_size + self.padding)
-            rect = pygame.Rect(x, y, self.slot_size, self.slot_size)
-            pygame.draw.rect(self.screen, (70, 70, 70), rect)
-            pygame.draw.rect(self.screen, (200, 200, 200), rect, 2)
-            if slot and slot["item"]:
+    def draw_grid(self, slots, start_pos, cols):
+        slot_size = 50  # Changed from 40 to 50 to match hotbar
+        padding = 5
+        for i, slot in enumerate(slots):
+            row = i // cols
+            col = i % cols
+            x = start_pos[0] + col * (slot_size + padding)
+            y = start_pos[1] + row * (slot_size + padding)
+            
+            # Draw slot background
+            pygame.draw.rect(self.screen, (50, 50, 50), (x, y, slot_size, slot_size))
+            pygame.draw.rect(self.screen, (100, 100, 100), (x, y, slot_size, slot_size), 1)
+            
+            # Draw item if present
+            if slot and slot.get("item"):
                 item = slot["item"]
-                tx, ty = item.texture_coords
-                block_size = c.BLOCK_SIZE
-                texture_rect = pygame.Rect(tx * block_size, ty * block_size, block_size, block_size)
-                item_img = self.atlas.subsurface(texture_rect)
-                item_img = pygame.transform.scale(item_img, (self.slot_size, self.slot_size))
-                self.screen.blit(item_img, rect.topleft)
-                if slot.get("quantity", 0) > 1:
-                    amount_surf = self.font.render(str(slot["quantity"]), True, (255,255,255))
-                    self.screen.blit(amount_surf, (rect.right - amount_surf.get_width(), rect.bottom - amount_surf.get_height()))
-            if self.dragging_item and self.dragging_container == container and self.dragging_index == idx:
-                # Skip drawing the item in its original slot while dragging.
-                continue
+                # Add safety check for texture_coords
+                if hasattr(item, 'texture_coords') and item.texture_coords:
+                    try:
+                        tx, ty = item.texture_coords
+                        # Updated scaling to match new slot size
+                        texture_rect = pygame.Rect(tx * 16, ty * 16, 16, 16)
+                        item_texture = self.texture_atlas.subsurface(texture_rect)
+                        scaled_texture = pygame.transform.scale(item_texture, (slot_size-8, slot_size-8))
+                        self.screen.blit(scaled_texture, (x+4, y+4))
+                        
+                        # Update quantity text position for new size
+                        quantity = slot.get("quantity", 0)
+                        if quantity > 1:
+                            quantity_text = self.font.render(str(quantity), True, (255, 255, 255))
+                            self.screen.blit(quantity_text, (x + slot_size - 20, y + slot_size - 20))
+                    except (TypeError, ValueError) as e:
+                        print(f"Error rendering item {item.name}: {e}")
+                else:
+                    print(f"Warning: Item {item.name} has no texture coordinates")
+            
+            # Highlight selected slot
+            if self.selected_slot == i:
+                pygame.draw.rect(self.screen, (255, 255, 0), (x, y, slot_size, slot_size), 2)
 
     def run(self):
         clock = pygame.time.Clock()

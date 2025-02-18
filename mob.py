@@ -5,6 +5,7 @@ import math
 import config as c
 from entity import Entity
 from item import Item, APPLE, WATER_BOTTLE  # Import example items
+from registry import REGISTRY  # Add this import
 
 class AIState:
     IDLE = "idle"
@@ -189,6 +190,16 @@ class Mob(Entity):
         self.vy += c.GRAVITY
         new_y = self.rect.y + self.vy
         
+        def get_block_from_chunk(world_info, block_x, block_y, chunk_index, local_x):
+            """Helper function to get block from chunk data"""
+            if (chunk_index in world_info["world_chunks"] and 
+                0 <= block_y < world_info["world_height"]):
+                block_id = world_info["world_chunks"][chunk_index][block_y][local_x]
+                if isinstance(block_id, (str, int)):
+                    return REGISTRY.get_block(str(block_id))
+                return block_id
+            return None
+
         # Vertical collision check with multiple points and increased precision
         self.on_ground = False
         if self.vy > 0:  # Moving down
@@ -199,48 +210,90 @@ class Mob(Entity):
                 (self.rect.right - 2, new_y + self.rect.height)
             ]
             for foot_x, foot_y in foot_points:
-                block_x = int(foot_x // world_info["block_size"])  # Convert to int
-                block_y = int(foot_y // world_info["block_size"])  # Convert to int
-                chunk_index = int(block_x // world_info["chunk_width"])  # Convert to int
-                local_x = int(block_x % world_info["chunk_width"])  # Convert to int
+                block_x = int(foot_x // world_info["block_size"])
+                block_y = int(foot_y // world_info["block_size"])
+                chunk_index = int(block_x // world_info["chunk_width"])
+                local_x = int(block_x % world_info["chunk_width"])
                 
-                if (chunk_index in world_info["world_chunks"] and 
-                    0 <= block_y < world_info["world_height"]):
-                    block = world_info["world_chunks"][chunk_index][block_y][local_x]
-                    if block.solid:
-                        self.rect.bottom = block_y * world_info["block_size"]
-                        new_y = self.rect.y
-                        self.vy = 0
-                        self.on_ground = True
-                        break
+                block = get_block_from_chunk(world_info, block_x, block_y, chunk_index, local_x)
+                if block and block.solid:
+                    self.rect.bottom = block_y * world_info["block_size"]
+                    new_y = self.rect.y
+                    self.vy = 0
+                    self.on_ground = True
+                    break
         
         elif self.vy < 0:  # Moving up
-            # Check head
+            # Check head points
             head_points = [
                 (self.rect.left + 5, new_y),
                 (self.rect.right - 5, new_y)
             ]
             for head_x, head_y in head_points:
-                block_x = int(head_x // world_info["block_size"])  # Convert to int
-                block_y = int(head_y // world_info["block_size"])  # Convert to int
-                chunk_index = int(block_x // world_info["chunk_width"])  # Convert to int
-                local_x = int(block_x % world_info["chunk_width"])  # Convert to int
+                block_x = int(head_x // world_info["block_size"])
+                block_y = int(head_y // world_info["block_size"])
+                chunk_index = int(block_x // world_info["chunk_width"])
+                local_x = int(block_x % world_info["chunk_width"])
                 
-                if (chunk_index in world_info["world_chunks"] and 
-                    0 <= block_y < world_info["world_height"]):
-                    block = world_info["world_chunks"][chunk_index][block_y][local_x]
-                    if block.solid:
-                        self.rect.top = (block_y + 1) * world_info["block_size"]
-                        new_y = self.rect.y
-                        self.vy = 0
-                        break
+                block = get_block_from_chunk(world_info, block_x, block_y, chunk_index, local_x)
+                if block and block.solid:
+                    self.rect.top = (block_y + 1) * world_info["block_size"]
+                    new_y = self.rect.y
+                    self.vy = 0
+                    break
         
         self.rect.y = new_y
+
+        # Fix block collision checks by getting actual block objects
+        def get_block(world_info, x, y):
+            """Get block from world_info dictionary"""
+            chunk_width = world_info["chunk_width"]
+            world_chunks = world_info["world_chunks"]
+            
+            # Calculate chunk and local coordinates
+            chunk_index = x // chunk_width
+            local_x = x % chunk_width
+            
+            # Get block from world chunks
+            if chunk_index in world_chunks and 0 <= y < world_info["world_height"]:
+                block = world_chunks[chunk_index][y][local_x]
+                # Convert string/int ID to block object if needed
+                if isinstance(block, (str, int)):
+                    return REGISTRY.get_block(block)
+                return block
+            return None
+
+        # Replace direct block checks with get_block helper
+        left_block = int(self.rect.left // world_info["block_size"])
+        right_block = int(self.rect.right // world_info["block_size"])
+        top_block = int(self.rect.top // world_info["block_size"])
+        bottom_block = int(self.rect.bottom // world_info["block_size"])
+
+        for check_x in range(left_block, right_block + 1):
+            for check_y in range(top_block, bottom_block + 1):
+                block = get_block(world_info, check_x, check_y)
+                if block and block.solid:
+                    block_rect = pygame.Rect(
+                        check_x * world_info["block_size"],
+                        check_y * world_info["block_size"],
+                        world_info["block_size"],
+                        world_info["block_size"]
+                    )
+                    
+                    if self.rect.colliderect(block_rect):
+                        # Resolve collision
+                        if self.vy > 0:  # Falling
+                            self.rect.bottom = block_rect.top
+                            self.vy = 0
+                            self.on_ground = True
+                        elif self.vy < 0:  # Rising
+                            self.rect.top = block_rect.bottom
+                            self.vy = 0
 
         # Update AI behavior
         player_pos = (player.rect.centerx, player.rect.centery)
         self.update_ai(dt, player_pos, world_info, player)
-        
+
         # Update animation based on state
         if self.attacking:
             self.animation_timer += dt
@@ -255,13 +308,17 @@ class Mob(Entity):
                     # Set animation based on current state
                     self.current_animation = "idle" if self.state == AIState.IDLE else "walk"
         
-        # Update frame for current animation
-        self.animation_timer += dt
-        if self.animation_timer >= self.frame_duration:
-            self.animation_timer = 0
-            self.frame_index = (self.frame_index + 1) % len(self.animations[self.current_animation])
+            # Update AI behavior
+            player_pos = (player.rect.centerx, player.rect.centery)
+            self.update_ai(dt, player_pos, world_info, player)
+            
+            # Update frame for current animation
+            self.animation_timer += dt
+            if self.animation_timer >= self.frame_duration:
+                self.animation_timer = 0
+                self.frame_index = (self.frame_index + 1) % len(self.animations[self.current_animation])
 
-        super().update(dt)
+            super().update(dt)
 
     def should_jump(self):
         """Check if there's a block in front of the mob that requires jumping"""
