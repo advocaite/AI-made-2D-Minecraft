@@ -1,6 +1,7 @@
 import pygame
 import config as c
 from ui_tooltip import Tooltip, get_item_tooltip
+import random  # Add this import
 
 class FurnaceUI:
     def __init__(self, screen, player_inventory, furnace_block, atlas):
@@ -84,6 +85,16 @@ class FurnaceUI:
         self.output_label = self.font.render("Output", True, (255, 255, 255))
         self.tooltip = Tooltip(self.font)
         self.hovered_item = None
+
+        # Add glow effect properties
+        self.glow_colors = [
+            (255, 100, 0, 255),   # Orange
+            (255, 200, 0, 255),   # Yellow
+            (255, 100, 0, 255)    # Orange
+        ]
+
+        # Add default minimum burn time to prevent division by zero
+        self.min_burn_time = 1000  # 1 second minimum
 
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
@@ -342,6 +353,74 @@ class FurnaceUI:
         else:
             self.swap_items(slot_type, slot, dict(target_item))
 
+    def draw_smelting_glow(self):
+        """Draw glow effect synchronized with smelting progress"""
+        if not self.furnace.script.is_burning:
+            return
+            
+        # Create surfaces for input and fuel slot glows
+        input_glow = pygame.Surface((self.slot_size, self.slot_size), pygame.SRCALPHA)
+        fuel_glow = pygame.Surface((self.slot_size, self.slot_size), pygame.SRCALPHA)
+        
+        # Calculate progress percentages with safety checks
+        melt_progress = self.furnace.script.melt_progress / 1000  # Convert to 0-1 range
+        
+        # Prevent division by zero for burn progress
+        max_burn_time = max(self.furnace.script.max_burn_time, self.min_burn_time)
+        burn_progress = self.furnace.script.burn_time_remaining / max_burn_time
+
+        # Draw input slot glow (moves up as item melts)
+        gradient_height = self.slot_size
+        for i in range(gradient_height):
+            rel_pos = i / gradient_height
+            if rel_pos < melt_progress:
+                # Calculate color based on position
+                color_idx = rel_pos * (len(self.glow_colors) - 1)
+                base_idx = int(color_idx)
+                next_idx = min(base_idx + 1, len(self.glow_colors) - 1)
+                blend = color_idx - base_idx
+                
+                # Interpolate between colors
+                c1 = self.glow_colors[base_idx]
+                c2 = self.glow_colors[next_idx]
+                color = [
+                    int(c1[j] * (1 - blend) + c2[j] * blend) for j in range(4)
+                ]
+                
+                # Draw line of gradient
+                pygame.draw.line(input_glow, color, (0, gradient_height - i), (self.slot_size, gradient_height - i))
+        
+        # Draw fuel slot glow (fades out as fuel burns)
+        fuel_alpha = int(255 * burn_progress)
+        for i in range(gradient_height):
+            rel_pos = i / gradient_height
+            color = (*self.glow_colors[0][:3], int(fuel_alpha * (1 - rel_pos)))
+            pygame.draw.line(fuel_glow, color, (0, i), (self.slot_size, i))
+        
+        # Draw glow surfaces under slots
+        self.screen.blit(input_glow, self.input_rect.topleft, special_flags=pygame.BLEND_RGBA_ADD)
+        self.screen.blit(fuel_glow, self.fuel_rect.topleft, special_flags=pygame.BLEND_RGBA_ADD)
+        
+        # Draw ember particles from fuel slot
+        if self.furnace.script.is_burning:
+            self.draw_ember_particles(burn_progress)
+
+    def draw_ember_particles(self, burn_progress):
+        """Draw floating ember particles based on burn progress"""
+        num_particles = int(5 * burn_progress)
+        for _ in range(num_particles):
+            x = self.fuel_rect.centerx + random.randint(-10, 10)
+            y = self.fuel_rect.top + random.randint(-15, 0)
+            size = random.randint(2, 4)
+            alpha = int(255 * burn_progress * random.random())
+            
+            pygame.draw.circle(
+                self.screen,
+                (255, 200, 0, alpha),
+                (x, y),
+                size
+            )
+
     def draw(self):
         """Draw the furnace UI"""
         # Draw UI background
@@ -495,6 +574,9 @@ class FurnaceUI:
                 if slot["quantity"] > 1:
                     quantity = self.font.render(str(slot["quantity"]), True, (255, 255, 255))
                     self.screen.blit(quantity, (rect.right - quantity.get_width() - 5, rect.bottom - quantity.get_height() - 5))
+
+        # Draw glow effects before items
+        self.draw_smelting_glow()
 
         # Draw dragged item
         if self.dragging_item and self.dragging_item["item"]:

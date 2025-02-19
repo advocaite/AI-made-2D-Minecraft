@@ -9,6 +9,7 @@ class BlockScript:
         self.output_slot = {"item": None, "quantity": 0}
         self.is_burning = False
         self.burn_time_remaining = 0
+        self.max_burn_time = 1000  # Default max burn time (1 second)
         self.melt_progress = 0
 
     def create_instance(self):
@@ -99,6 +100,12 @@ class BlockScript:
                         self.fuel_slot = {"item": None, "quantity": 0}
                     print(f"Started burning: time={self.burn_time_remaining}")
 
+        # Update max_burn_time when new fuel is added
+        if self.fuel_slot and self.fuel_slot.get("item"):
+            fuel_item = self.fuel_slot["item"]
+            if hasattr(fuel_item, "burn_time"):
+                self.max_burn_time = fuel_item.burn_time
+
         # Process melting if burning
         if self.is_burning and self.input_slot.get("item"):
             self.burn_time_remaining -= dt
@@ -139,6 +146,7 @@ class BlockScript:
             'output_slot': self._slot_to_dict(self.output_slot),
             'is_burning': self.is_burning,
             'burn_time_remaining': self.burn_time_remaining,
+            'max_burn_time': self.max_burn_time,
             'melt_progress': self.melt_progress
         }
         print(f"Saving furnace state: {data}")  # Debug output
@@ -163,6 +171,7 @@ class BlockScript:
         
         self.is_burning = data.get('is_burning', False)
         self.burn_time_remaining = data.get('burn_time_remaining', 0)
+        self.max_burn_time = data.get("max_burn_time", 1000)  # Add this line
         self.melt_progress = data.get('melt_progress', 0)
         
         print(f"Loaded furnace state:")
