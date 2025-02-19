@@ -1,6 +1,9 @@
 import pygame
 import config as c
 
+# Create registry dict FIRST before using it
+ITEM_REGISTRY = {}
+
 class Item:
     def __init__(self, id, name, texture_coords, stack_size=64, is_block=False, **kwargs):
         self.id = id
@@ -138,6 +141,37 @@ IRON_AXE.type = "tool"
 IRON_SHOVEL = Item(43, "Iron Shovel", (6, 4), stack_size=1)
 IRON_SHOVEL.type = "tool"
 
+# Add unbreakable item definition with proper attributes
+UNBREAKABLE = Item(
+    id=8,  # Must match block ID
+    name="Unbreakable",
+    texture_coords=(4, 3),  # Must match block texture
+    stack_size=64,
+    is_block=True
+)
+
+# Register items AFTER they're defined
+ITEM_REGISTRY.update({
+    UNBREAKABLE.id: UNBREAKABLE,
+    ITEM_PICKAXE.id: ITEM_PICKAXE,
+    ITEM_AXE.id: ITEM_AXE,
+    APPLE.id: APPLE,
+    WATER_BOTTLE.id: WATER_BOTTLE,
+    IRON_INGOT.id: IRON_INGOT,
+    GOLD_INGOT.id: GOLD_INGOT,
+    COAL.id: COAL,
+    IRON_HELMET.id: IRON_HELMET,
+    IRON_CHESTPLATE.id: IRON_CHESTPLATE,
+    IRON_LEGGINGS.id: IRON_LEGGINGS,
+    IRON_BOOTS.id: IRON_BOOTS,
+    IRON_SWORD.id: IRON_SWORD,
+    IRON_PICKAXE.id: IRON_PICKAXE,
+    IRON_AXE.id: IRON_AXE,
+    IRON_SHOVEL.id: IRON_SHOVEL,
+    ITEM_SHOVEL.id: ITEM_SHOVEL,
+    ITEM_SWORD.id: ITEM_SWORD
+})
+
 # Update tooltip function to show modifiers
 def get_item_tooltip(item):
     if not item:
@@ -163,27 +197,6 @@ def get_item_tooltip(item):
         lines.append("Placeable block")
         
     return '\n'.join(lines)
-
-# Create a registry of all items by their IDs
-ITEM_REGISTRY = {
-    APPLE.id: APPLE,
-    WATER_BOTTLE.id: WATER_BOTTLE,
-    IRON_INGOT.id: IRON_INGOT,
-    GOLD_INGOT.id: GOLD_INGOT,
-    COAL.id: COAL,
-    IRON_HELMET.id: IRON_HELMET,
-    IRON_CHESTPLATE.id: IRON_CHESTPLATE,
-    IRON_LEGGINGS.id: IRON_LEGGINGS,
-    IRON_BOOTS.id: IRON_BOOTS,
-    IRON_SWORD.id: IRON_SWORD,
-    IRON_PICKAXE.id: IRON_PICKAXE,
-    IRON_AXE.id: IRON_AXE,
-    IRON_SHOVEL.id: IRON_SHOVEL,
-    ITEM_PICKAXE.id: ITEM_PICKAXE,
-    ITEM_AXE.id: ITEM_AXE,
-    ITEM_SHOVEL.id: ITEM_SHOVEL,
-    ITEM_SWORD.id: ITEM_SWORD
-}
 
 # Also register any tool items
 for tool in [ITEM_PICKAXE, ITEM_AXE, ITEM_SHOVEL, ITEM_SWORD]:

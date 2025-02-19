@@ -37,7 +37,12 @@ class BlockLoader:
     def create_block(self, block_data):
         """Create a block instance with item variant"""
         # Import here to avoid circular imports
-        from block import Block, StorageBlock, FurnaceBlock, EnhancerBlock, FarmingBlock
+        from block import Block, StorageBlock, FurnaceBlock, EnhancerBlock, FarmingBlock, UNBREAKABLE
+        from item import Item, UNBREAKABLE as UNBREAKABLE_ITEM
+        
+        # Special case for unbreakable blocks
+        if block_data.get('id') == 8 or block_data.get('name') == "Unbreakable":
+            return UNBREAKABLE  # Return the singleton instance
         
         block_type = block_data.get('type', 'basic')
         
@@ -70,7 +75,6 @@ class BlockLoader:
         self.blocks[str(block.id)] = block
         
         # Always create item variant
-        from item import Item
         item_variant = Item(
             id=block.id,
             name=block.name,

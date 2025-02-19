@@ -1,3 +1,5 @@
+import pygame
+
 class BlockScript:
     def __init__(self, block):
         self.block = block
@@ -11,6 +13,9 @@ class BlockScript:
         self._set_texture(self.untilled_coords)
         
         print(f"[FARM SCRIPT] Created new farming block script with texture: {self.block.texture_coords}")
+        self._needs_texture_update = True  # Changed to True initially
+        self._last_update_time = pygame.time.get_ticks()  # Initialize with current time
+        self._update_interval = 1000  # Update every 1 second instead of every frame
 
     def _set_texture(self, coords):
         """Helper to update block texture"""
@@ -18,14 +23,23 @@ class BlockScript:
         print(f"[FARM SCRIPT] Set texture to: {coords}")
 
     def update_texture(self):
-        """Update block texture based on state"""
+        """Optimized texture update"""
+        if not self._needs_texture_update:
+            return False
+            
         if self.plant:
-            # Use plant's current growth stage texture
-            self.block.texture_coords = self.plant.get_texture_coords()
+            coords = self.plant.get_texture_coords()
+            if coords != self.block.texture_coords:
+                self.block.texture_coords = coords
+                self._needs_texture_update = False
+                return True
         else:
-            # Use tilled or untilled texture
-            self.block.texture_coords = self.tilled_coords if self.tilled else self.untilled_coords
-        print(f"Updated texture to: {self.block.texture_coords}")
+            new_coords = self.tilled_coords if self.tilled else self.untilled_coords
+            if new_coords != self.block.texture_coords:
+                self.block.texture_coords = new_coords
+                self._needs_texture_update = False
+                return True
+        return False
 
     def create_instance(self):
         new_block = self.block.create_base_instance()
@@ -47,28 +61,45 @@ class BlockScript:
 
     def plant_seed(self, seed_item):
         """Plant a seed in the tilled farmland"""
-        print(f"Attempting to plant seed. Tilled: {self.tilled}, Has plant: {self.plant is not None}")
+        print(f"[FARM DEBUG] Plant attempt - Block at {id(self)}")
+        print(f"[FARM DEBUG] Current state: tilled={self.tilled}, has_plant={self.plant is not None}")
         
         if not hasattr(seed_item, 'plant_data'):
-            print(f"No plant data for seed: {seed_item.name}")
+            print(f"[FARM DEBUG] No plant data for seed: {seed_item.name}")
             return False
 
         if not self.tilled or self.plant:
-            print(f"Cannot plant: tilled={self.tilled}, has_plant={self.plant is not None}")
+            print(f"[FARM DEBUG] Cannot plant: tilled={self.tilled}, has_plant={self.plant is not None}")
             return False
         
-        print(f"Planting seed: {seed_item.name}")
+        print(f"[FARM DEBUG] Planting {seed_item.name} in block {id(self)}")
         self.plant = Plant(seed_item.plant_data)
-        self.update_texture()
+        self._needs_texture_update = True  # Force texture update
+        self.update_texture()  # Immediately update texture
+        print(f"[FARM DEBUG] Plant texture set to: {self.plant.get_texture_coords()}")
         return True
 
     def update(self, dt):
-        """Update plant growth"""
+        """Optimized plant growth update"""
         if not self.plant:
             return False
+
+        current_time = pygame.time.get_ticks()
+        if current_time - self._last_update_time < self._update_interval:
+            return False
             
+        self._last_update_time = current_time
+        
+        # Add debug prints
+        print(f"[FARM DEBUG] Plant growing: Stage {self.plant.current_stage}, Time: {self.plant.time_in_stage}/{self.plant.growth_time}")
+        
         if self.plant.update(dt):
-            self.update_texture()
+            self._needs_texture_update = True
+            # Force texture update
+            old_coords = self.block.texture_coords
+            new_coords = self.plant.get_texture_coords()
+            self.block.texture_coords = new_coords
+            print(f"[FARM DEBUG] Plant grew! Stage: {self.plant.current_stage}, Texture: {old_coords} -> {new_coords}")
             return True
         return False
 
@@ -117,6 +148,7 @@ class Plant:
         self.time_in_stage = 0
         self.texture_coords = plant_data['texture_coords']
         self.solid = False
+        self._cached_texture_coords = None  # Cache for texture coordinates
 
     def is_fully_grown(self):
         """Check if plant has reached final growth stage"""
@@ -125,42 +157,74 @@ class Plant:
     def get_drops(self, tool=None):
         """Get drops when harvesting the plant"""
         from registry import REGISTRY
+        import random
         
-        print(f"[FARM DEBUG] Looking up items by name")
-        wheat_seed = REGISTRY.get_item("WHEAT_SEED")
-        wheat = REGISTRY.get_item("WHEAT")
-        
-        print(f"[FARM DEBUG] Found items:")
-        print(f"Wheat Seed: {wheat_seed.name if wheat_seed else 'Not found'}")
-        print(f"Wheat: {wheat.name if wheat else 'Not found'}")
-        
-        # Always return at least one seed
         drops = []
-        if wheat_seed:
-            drops.append((wheat_seed, 1))
-            print(f"[FARM DEBUG] Added seed drop: {wheat_seed.name}")
-        
-        # Add crop only if fully grown
-        if self.is_fully_grown() and wheat:
-            drops.append((wheat, 1))
-            print(f"[FARM DEBUG] Added crop drop: {wheat.name}")
-        
-        if not drops:
-            print("[FARM DEBUG] Warning: No valid drops found!")
-            print(f"[FARM DEBUG] Available items: {list(REGISTRY.items.keys())}")
+        if 'drops' not in self.plant_data:
+            print("[FARM DEBUG] No drops specified in plant_data")
+            return []
             
+        drop_data = self.plant_data['drops']
+        print(f"[FARM DEBUG] Processing drops: {drop_data}")
+        
+        # Process seed drops
+        if 'seed' in drop_data and drop_data['seed']:
+            seed_info = drop_data['seed']
+            print(f"[FARM DEBUG] Looking for seed item: {seed_info['id']}")
+            seed_item = REGISTRY.get_item(seed_info['id'])
+            if seed_item:
+                # Handle random quantity ranges like "1-3"
+                quantity = seed_info['quantity']
+                if isinstance(quantity, str) and '-' in quantity:
+                    min_q, max_q = map(int, quantity.split('-'))
+                    quantity = random.randint(min_q, max_q)
+                else:
+                    quantity = int(quantity)
+                    
+                drops.append((seed_item, quantity))
+                print(f"[FARM DEBUG] Found seed item: {seed_item.name}")
+                print(f"[FARM DEBUG] Adding seed drop: {seed_item.name} x{quantity}")
+            else:
+                print(f"[FARM DEBUG] Failed to find seed item: {seed_info['id']}")
+
+        # Process crop drops if fully grown
+        if self.is_fully_grown() and 'crop' in drop_data and drop_data['crop']:
+            crop_info = drop_data['crop']
+            print(f"[FARM DEBUG] Looking for crop item: {crop_info['id']}")
+            crop_item = REGISTRY.get_item(crop_info['id'])
+            if crop_item:
+                # Handle random quantity ranges
+                quantity = crop_info['quantity']
+                if isinstance(quantity, str) and '-' in quantity:
+                    min_q, max_q = map(int, quantity.split('-'))
+                    quantity = random.randint(min_q, max_q)
+                else:
+                    quantity = int(quantity)
+                    
+                drops.append((crop_item, quantity))
+                print(f"[FARM DEBUG] Found crop item: {crop_item.name}")
+                print(f"[FARM DEBUG] Adding crop drop: {crop_item.name} x{quantity}")
+            else:
+                print(f"[FARM DEBUG] Failed to find crop item: {crop_info['id']}")
+        
         return drops
 
     def update(self, dt):
+        """Update plant growth with fixed dt"""
         if self.current_stage >= len(self.growth_stages) - 1:
             return False
 
+        print(f"[FARM DEBUG] Growing... Time: {self.time_in_stage}/{self.growth_time}")
         self.time_in_stage += dt
         if self.time_in_stage >= self.growth_time:
             self.current_stage += 1
             self.time_in_stage = 0
+            print(f"[FARM DEBUG] Advanced to stage {self.current_stage}")
             return True
         return False
 
     def get_texture_coords(self):
-        return self.texture_coords[self.current_stage]
+        """Cached texture coordinate lookup"""
+        if self._cached_texture_coords is None or self._cached_texture_coords[0] != self.current_stage:
+            self._cached_texture_coords = (self.current_stage, self.texture_coords[self.current_stage])
+        return self._cached_texture_coords[1]

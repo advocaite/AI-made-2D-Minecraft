@@ -47,3 +47,9 @@ ENTITY_ATTACK_RANGE = 30  # Pixels distance for attack to connect
 ENTITY_ATTACK_DURATION = 800  # Increased to 800ms for slower attack animation
 ENTITY_KNOCKBACK_FORCE = 16  # Force of knockback when hit
 ENTITY_KNOCKBACK_LIFT = 8  # Upward force of knockback
+
+# Performance settings
+PLANT_UPDATE_INTERVAL = 1000  # Milliseconds between plant growth updates
+MAX_VISIBLE_CHUNKS = 5        # Maximum chunks to render/update at once
+TEXTURE_CACHE_SIZE = 100      # Maximum number of textures to cache
+FARM_CHUNK_DISTANCE = 2       # Only update farms within this many chunks of player

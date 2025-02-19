@@ -419,6 +419,17 @@ FURNACE = FurnaceBlock(
 FARMLAND = FarmingBlock(25, "Farmland", (13, 0), True, (101, 67, 33))  # Fix this line
 ENHANCER = EnhancerBlock(50, "Enhancer", (17, 1))
 
+# Import UNBREAKABLE item
+from item import UNBREAKABLE as UNBREAKABLE_ITEM
+
+# Create unbreakable block with proper item reference
+UNBREAKABLE = Block(8, "Unbreakable", True, (50, 50, 50), (4, 3))
+UNBREAKABLE.item_variant = UNBREAKABLE_ITEM
+UNBREAKABLE_ITEM.block = UNBREAKABLE
+
+# Ensure it's properly registered before loader initialization
+REGISTRY.register_block(UNBREAKABLE)
+
 # Register blocks in registry
 for block in [AIR, GRASS, DIRT, STONE, SAND, SANDSTONE, SNOW_GRASS, SNOW_DIRT,
               WOOD, LEAVES, LEAVESGG, SAVANNA_GRASS, SAVANNA_DIRT, UNBREAKABLE,  # Add UNBREAKABLE here

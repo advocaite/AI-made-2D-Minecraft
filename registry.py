@@ -74,20 +74,17 @@ class Registry:
             # Try direct lookup first
             item = self.items.get(item_id)
             if item:
+                print(f"[REGISTRY] Found item by name: {item_id}")
                 return item
                 
             # Try numeric ID
             item = self.items.get(str(item_id))
             if item:
+                print(f"[REGISTRY] Found item by numeric ID: {item_id}")
                 return item
                 
-            # Try case-insensitive name search
-            for key, value in self.items.items():
-                if value.name.upper() == item_id.upper():
-                    return value
-                    
         print(f"[REGISTRY] Warning: Item '{item_id}' not found")
-        print(f"[REGISTRY] Available items: {list(self.items.keys())}")
+        print(f"[REGISTRY] Available items: {sorted(list(self.items.keys()))}")
         return None
 
 # Create global registry instance

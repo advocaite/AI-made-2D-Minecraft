@@ -5,6 +5,10 @@ from tree_generator import generate_tree
 from biomes import BiomeManager
 from dungeon_generator import DungeonGenerator
 
+# Add chunk caching
+chunk_cache = {}
+MAX_CACHED_CHUNKS = 50
+
 def int_to_block(code):
     """Convert an integer code to the corresponding Block object."""
     mapping = {
@@ -24,7 +28,12 @@ def int_to_block(code):
     return mapping.get(code, b.AIR)
 
 def generate_chunk(chunk_index, chunk_width, height, seed=0):
-    """Generate a chunk with biome-based terrain"""
+    """Generate a chunk with biome-based terrain and caching"""
+    # Check cache first
+    cache_key = (chunk_index, seed)
+    if cache_key in chunk_cache:
+        return [row[:] for row in chunk_cache[cache_key]]  # Return deep copy
+
     biome_manager = BiomeManager(seed)
     chunk = [[0 for _ in range(chunk_width)] for _ in range(height)]
     surface_heights = [None] * chunk_width
@@ -160,6 +169,11 @@ def generate_chunk(chunk_index, chunk_width, height, seed=0):
             if isinstance(chunk[y][x], int):
                 chunk[y][x] = int_to_block(chunk[y][x])
 
+    # Cache the chunk before returning
+    if len(chunk_cache) >= MAX_CACHED_CHUNKS:
+        chunk_cache.pop(next(iter(chunk_cache)))
+    chunk_cache[cache_key] = [row[:] for row in chunk]  # Store deep copy
+
     return chunk
 
 def generate_acacia_tree(chunk, x, y):
@@ -195,3 +209,7 @@ def generate_acacia_tree(chunk, x, y):
                         chunk[canopy_y - dy][x + dx] = b.LEAVESGG
                 else:
                     chunk[canopy_y - dy][x + dx] = b.LEAVESGG
+
+def clear_chunk_cache():
+    """Clear the chunk cache when needed"""
+    chunk_cache.clear()

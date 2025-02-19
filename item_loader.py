@@ -136,12 +136,11 @@ class ItemScript:
             
             # Create base item with all possible attributes
             item = Item(
-                id=str(data['id']),  # Convert ID to string
+                id=data['id'],  # Keep as integer for item creation
                 name=str(data['name']),
                 texture_coords=tuple(data['texture_coords']),
                 stack_size=int(data.get('stack_size', 64)),
-                is_block=False,  # JSON items are not blocks by default
-                burn_time=data.get('burn_time', 0)
+                is_block=False
             )
             
             # Set category/type
@@ -154,9 +153,11 @@ class ItemScript:
                 if 'plant_data' in data:
                     item.plant_data = data['plant_data']
             
-            # Register with string ID
-            ITEM_REGISTRY[str(item.id)] = item
+            # Register item by both ID and name
+            ITEM_REGISTRY[item.id] = item
+            ITEM_REGISTRY[item_id] = item  # Also register by name (e.g., "BEETROOT_SEED")
             print(f"[ITEM LOADER] Created and registered item: {item.name} (ID: {item.id}, Type: {item.type})")
+            print(f"[ITEM LOADER] Registered under keys: {item.id} and {item_id}")
             
             return item
             

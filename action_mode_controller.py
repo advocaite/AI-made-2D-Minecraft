@@ -16,14 +16,13 @@ class ActionModeController:
 
             if chunk_index in world_chunks and 0 <= world_y < world_height:
                 block = world_chunks[chunk_index][world_y][local_x]
-                # Only collect non-AIR blocks
-                if block.id != 0 and block != b.AIR:  # Check both id and direct comparison
+                # Check all three conditions before breaking
+                if block.id != 0 and block != b.AIR and block != b.UNBREAKABLE:  # Fixed condition
                     print(f"Breaking block: {block.name}")
-                    world_chunks[chunk_index][world_y][local_x] = b.AIR
-                    # Only add to inventory if block has an item variant
                     if hasattr(block, 'item_variant') and block.item_variant:
                         self.inventory.add_item(block.item_variant, 1)
                         print(f"Added {block.item_variant.name} to inventory")
+                    world_chunks[chunk_index][world_y][local_x] = b.AIR
 
         # Get block at mouse position
         mouse_x, mouse_y = event.pos
