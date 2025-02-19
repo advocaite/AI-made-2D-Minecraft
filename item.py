@@ -1,5 +1,6 @@
 import pygame
 import config as c
+import os  # Add this import at the top
 
 # Create registry dict FIRST before using it
 ITEM_REGISTRY = {}
@@ -32,6 +33,7 @@ class Item:
         self.health_restore = kwargs.get('health_restore', 0)
         self.tint = None  # Added this for the get_texture method
         self.type = None  # Add this line to store item type
+        self.script = None  # Add script property
 
         # Add stat modifiers
         self.modifiers = {
@@ -42,6 +44,52 @@ class Item:
             'movement_speed': 0
         }
         self.enhanced_suffix = ""  # For names like "Iron Sword of Sharpness"
+
+        # Handle multiple scripts if defined
+        if kwargs.get('scripts'):
+            for script_path in kwargs['scripts']:
+                self._load_script(script_path)
+        # Maintain backward compatibility with single script
+        elif kwargs.get('script_path'):
+            self._load_script(kwargs['script_path'])
+
+    def _load_script(self, script_path):
+        """Load the item's script"""
+        try:
+            import importlib.util
+            
+            # Get absolute path to scripts directory
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            full_path = os.path.join(base_dir, "scripts", "items", script_path)
+            
+            print(f"[ITEM] Attempting to load script from: {full_path}")
+            
+            if not os.path.exists(full_path):
+                print(f"[ITEM] Script file not found at: {full_path}")
+                return
+                
+            spec = importlib.util.spec_from_file_location(
+                f"item_script_{self.id}", 
+                full_path
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            
+            self.script = module.ItemScript(self)
+            print(f"[ITEM] Successfully loaded script for {self.name}")
+            
+        except Exception as e:
+            print(f"[ITEM] Error loading script for {self.name}: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def on_hit(self, target):
+        """Delegate hit behavior to script"""
+        if self.script and hasattr(self.script, 'on_hit'):
+            print(f"[ITEM] {self.name} delegating hit to script")
+            return self.script.on_hit(target)
+        print(f"[ITEM] {self.name} has no script or on_hit method")
+        return False
 
     def get_texture(self, atlas):
         block_size = c.BLOCK_SIZE
@@ -129,8 +177,9 @@ IRON_BOOTS = Item(33, "Iron Boots", (5, 4), stack_size=1)
 IRON_BOOTS.type = "boots"
 
 # Tools and weapons with types
-IRON_SWORD = Item(40, "Iron Sword", (6, 1), stack_size=1)
+IRON_SWORD = Item(40, "Iron Sword", (30, 3), stack_size=1, script_path="iron_sword.py")
 IRON_SWORD.type = "weapon"
+IRON_SWORD.modifiers = {'damage': 5, 'attack_speed': 1.0}  # Add base stats
 
 IRON_PICKAXE = Item(41, "Iron Pickaxe", (6, 2), stack_size=1)
 IRON_PICKAXE.type = "tool"
@@ -187,6 +236,20 @@ def get_item_tooltip(item):
     if stats:
         lines.append("")  # Empty line for spacing
         lines.extend(stats.split("\n"))
+
+    # Add script effects info if present
+    if hasattr(item, 'script'):
+        lines.append("")  # Empty line before effects
+        if hasattr(item.script, 'get_tooltip_info'):
+            # Let script provide its own tooltip info
+            script_info = item.script.get_tooltip_info()
+            lines.extend(script_info)
+        else:
+            # Default script effect display
+            if hasattr(item.script, 'on_hit'):
+                lines.append("Special Effects:")
+                if item.name == "Iron Sword":  # You can make this more generic
+                    lines.append("• 10% chance to cause bleeding")
 
     # Add other properties
     if hasattr(item, 'burn_time'):

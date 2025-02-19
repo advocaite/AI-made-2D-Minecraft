@@ -64,27 +64,30 @@ class ItemLoader:
         with open(self.schema_path, 'w') as f:
             json.dump(default_schema, f, indent=4)
 
-    def load_script(self, script_path):
-        """Load a Python script for custom item behavior"""
-        if not script_path:
-            return None
-            
-        full_path = self.scripts_dir / script_path
-        print(f"Looking for script at: {full_path}")
-        
-        if not full_path.exists():
-            print(f"Warning: Script {script_path} not found. Creating default script...")
-            self._create_default_script(script_path)
-            
+    def load_script(self, item, script_path):
+        """Load a script for an item"""
         try:
-            spec = importlib.util.spec_from_file_location(full_path.stem, full_path)
+            import importlib.util
+            full_path = self.scripts_dir / script_path
+            print(f"[ITEM LOADER] Loading script from: {full_path}")
+            
+            if not full_path.exists():
+                print(f"[ITEM LOADER] Script not found at {full_path}")
+                return
+                
+            spec = importlib.util.spec_from_file_location(
+                f"item_script_{item.id}", 
+                str(full_path)
+            )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            print(f"Successfully loaded script for {script_path}")
-            return module.ItemScript
+            item.script = module.ItemScript(item)
+            print(f"[ITEM LOADER] Successfully attached script to {item.name}")
+            
         except Exception as e:
-            print(f"Error loading script {script_path}: {e}")
-            return None
+            print(f"[ITEM LOADER] Error loading script for {item.name}: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _create_default_script(self, script_path):
         """Create a default script file if missing"""
@@ -136,7 +139,7 @@ class ItemScript:
             
             # Create base item with all possible attributes
             item = Item(
-                id=data['id'],  # Keep as integer for item creation
+                id=data['id'],
                 name=str(data['name']),
                 texture_coords=tuple(data['texture_coords']),
                 stack_size=int(data.get('stack_size', 64)),
@@ -146,18 +149,24 @@ class ItemScript:
             # Set category/type
             item.type = data.get('category', 'material')
             
-            # Handle special categories
-            if item.type == 'seed':
-                item.is_seed = True
-                # Store plant data if available
-                if 'plant_data' in data:
-                    item.plant_data = data['plant_data']
+            # Set modifiers if present
+            if 'modifiers' in data:
+                item.modifiers = data['modifiers']
             
-            # Register item by both ID and name
+            # Load scripts if defined
+            if 'scripts' in data:
+                print(f"[ITEM LOADER] Loading scripts for {item.name}: {data['scripts']}")
+                for script_path in data['scripts']:
+                    try:
+                        self.load_script(item, script_path)
+                    except Exception as e:
+                        print(f"[ITEM LOADER] Error loading script {script_path}: {e}")
+            
+            # Register item
             ITEM_REGISTRY[item.id] = item
-            ITEM_REGISTRY[item_id] = item  # Also register by name (e.g., "BEETROOT_SEED")
-            print(f"[ITEM LOADER] Created and registered item: {item.name} (ID: {item.id}, Type: {item.type})")
-            print(f"[ITEM LOADER] Registered under keys: {item.id} and {item_id}")
+            ITEM_REGISTRY[item_id] = item
+            
+            print(f"[ITEM LOADER] Created item {item.name} with script: {item.script is not None}")
             
             return item
             

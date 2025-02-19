@@ -8,7 +8,7 @@ class InGameMenu:
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont(None, 48)
         # New option added in the list.
-        self.options = ["Return to Game", "Toggle Screen Mode", "Quit Game"]
+        self.options = ["Return to Game", "Toggle Screen Mode", "Main Menu"]
         self.selected = 0
 
     def run(self):

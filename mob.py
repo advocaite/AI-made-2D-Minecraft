@@ -42,6 +42,7 @@ class Mob(Entity):
         self.attack_cooldown = 0
         self.attacking = False
         self.last_attack_time = 0
+        self.effects = {}  # Add effects dictionary
 
     def decide_state(self, player_pos, world_info):
         px, py = player_pos
@@ -320,6 +321,20 @@ class Mob(Entity):
 
             super().update(dt)
 
+        # Update effects
+        current_time = pygame.time.get_ticks()
+        for effect_name, effect_data in list(self.effects.items()):
+            if current_time - effect_data['start_time'] >= effect_data['duration']:
+                del self.effects[effect_name]
+                continue
+                
+            # Handle bleeding effect
+            if effect_name == 'bleeding':
+                if current_time - effect_data.get('last_damage', 0) > 1000:  # Damage every second
+                    self.health -= 1
+                    effect_data['last_damage'] = current_time
+                    print(f"Bleeding damage! Mob health: {self.health}")
+
     def should_jump(self):
         """Check if there's a block in front of the mob that requires jumping"""
         if not self.on_ground:
@@ -483,3 +498,11 @@ class Mob(Entity):
                 player.vy = -c.ENTITY_KNOCKBACK_LIFT
                 
                 print(f"Mob attacked player! Player health: {player.health}")
+
+    def apply_effect(self, effect_name, duration):
+        """Apply a status effect to the mob"""
+        self.effects[effect_name] = {
+            'duration': duration,
+            'start_time': pygame.time.get_ticks()
+        }
+        print(f"Applied {effect_name} effect to mob for {duration}ms")

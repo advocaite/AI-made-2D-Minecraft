@@ -12,7 +12,8 @@ class Block:
         self.name = name
         self.solid = solid
         self.color = color
-        self.texture_coords = texture_coords  # (x, y) in the texture atlas
+        # Convert texture_coords to tuple or use default
+        self.texture_coords = tuple(texture_coords) if texture_coords is not None else (0, 0)
         self.drop_item = drop_item  # Optional item drop
         self.animation_frames = animation_frames  # List of (x, y) tuples for animation frames
         self.frame_duration = frame_duration  # Duration of each frame in milliseconds
@@ -22,6 +23,9 @@ class Block:
 
     # NEW: Helper method to get the block texture with tint applied if set.
     def get_texture(self, atlas):
+        # Always use tuple for cache key
+        cache_key = (self.id, self.texture_coords)  # texture_coords is already a tuple
+
         # Clear texture cache if coordinates changed
         if hasattr(self, '_last_coords') and self._last_coords != self.texture_coords:
             if hasattr(self, '_cached_base'):
@@ -92,7 +96,7 @@ class Block:
         self.color = data.get('color', self.color)
         self.texture_coords = data.get('texture_coords', self.texture_coords)
         self.tint = data.get('tint', self.tint)
-        self.entity_type = data.get('entity_type', self.entity_type)
+        self.entity_type = data.get('entity_type', self.entity_type)  # Fixed missing parenthesis
 
 class StorageBlock(Block):
     def __init__(self, id, name, texture_coords, solid=True, color=(139, 69, 19), 
@@ -203,49 +207,70 @@ class EnhancerBlock(Block):
                         animation_frames, frame_duration, tint, entity_type)
         self.has_inventory = True
         self.can_interact = True
-        self.input_slot = None
-        self.ingredient_slot = None
+        
+        # Import and create script right away, similar to FurnaceBlock
+        from scripts.blocks.enhancer_block import BlockScript
+        self.script = BlockScript(self)
+        # For backward compatibility
+        self.input_slot = self.script.input_slot
+        self.ingredient_slot = self.script.ingredient_slot
 
     def create_instance(self):
-        """Create a new instance of the enhancer with its own slots"""
-        new_block = EnhancerBlock(self.id, self.name, self.texture_coords)
-        new_block.input_slot = None
-        new_block.ingredient_slot = None
-        new_block.item_variant = self.item_variant  # Make sure this is copied
-        new_block.drop_item = self.drop_item  # Make sure this is copied
+        """Create a new instance with its own inventory"""
+        new_block = EnhancerBlock(
+            id=self.id,
+            name=self.name,
+            texture_coords=self.texture_coords,
+            solid=self.solid,
+            color=self.color
+        )
+        # Ensure script is initialized
+        from scripts.blocks.enhancer_block import BlockScript
+        new_block.script = BlockScript(new_block)
+        new_block.input_slot = new_block.script.input_slot
+        new_block.ingredient_slot = new_block.script.ingredient_slot
+        new_block.item_variant = self.item_variant
+        new_block.drop_item = self.drop_item
         return new_block
 
-    def to_dict(self):
-        """Serialize enhancer data for saving"""
-        return {
-            'id': self.id,
-            'name': self.name,
-            'input_slot': self._slot_to_dict(self.input_slot),
-            'ingredient_slot': self._slot_to_dict(self.ingredient_slot)
-        }
+    def update_slots(self):
+        """Keep backward compatibility slots in sync with script"""
+        self.input_slot = self.script.input_slot
+        self.ingredient_slot = self.script.ingredient_slot
 
-    def _slot_to_dict(self, slot):
-        if slot and slot.get('item'):
-            return {
-                'item_id': slot['item'].id,
-                'quantity': slot['quantity']
-            }
-        return None
+    def handle_item_transfer(self, slot_name, item_data):
+        """Handle item transfers to/from the enhancer block"""
+        if not self.script:
+            return False
+            
+        if slot_name not in ['input_slot', 'ingredient_slot']:
+            return False
+            
+        slot = getattr(self.script, slot_name)
+        if item_data:
+            slot.update(item_data)
+        else:
+            slot.clear()
+        self.update_slots()
+        return True
+
+    def to_dict(self):
+        """Serialize enhancer state"""
+        data = super().to_dict()
+        if self.script:
+            data.update({
+                'enhancer_data': self.script.to_dict()
+            })
+        return data
 
     def from_dict(self, data, item_registry):
-        """Deserialize enhancer data when loading"""
-        self.input_slot = self._dict_to_slot(data['input_slot'], item_registry)
-        self.ingredient_slot = self._dict_to_slot(data['ingredient_slot'], item_registry)
-
-    def _dict_to_slot(self, slot_data, item_registry):
-        if slot_data:
-            item = item_registry.get(slot_data['item_id'])
-            if item:
-                return {
-                    'item': item,
-                    'quantity': slot_data['quantity']
-                }
-        return None
+        """Deserialize enhancer state"""
+        super().from_dict(data, item_registry)
+        if self.script and 'enhancer_data' in data:
+            self.script.from_dict(data['enhancer_data'], item_registry)
+            # Update compatibility references
+            self.input_slot = self.script.input_slot
+            self.ingredient_slot = self.script.ingredient_slot
 
 class FarmingBlock(Block):
     def __init__(self, id, name, texture_coords, solid=True, color=(139, 69, 19), 

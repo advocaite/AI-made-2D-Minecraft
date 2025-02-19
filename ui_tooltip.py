@@ -1,4 +1,5 @@
 import pygame
+from item import IRON_SWORD  # Add this import
 
 class Tooltip:
     def __init__(self, font, padding=5, bg_color=(40, 40, 40, 230), text_color=(255, 255, 255)):
@@ -58,11 +59,24 @@ def get_item_tooltip(item):
                 stats.append(f"{stat.replace('_', ' ').title()}: +{value}")
         lines.extend(stats)
 
-    # Add burn time if exists and is not None
-    if hasattr(item, 'burn_time') and item.burn_time is not None:
-        lines.append(f"Burn time: {item.burn_time/1000:.1f}s")
+    # Add script effects info if present
+    if hasattr(item, 'script') and item.script:
+        lines.append("")  # Empty line before effects
+        if hasattr(item.script, 'get_tooltip_info'):
+            # Let script provide its own tooltip info
+            script_info = item.script.get_tooltip_info()
+            lines.extend(script_info)
+        elif hasattr(item.script, 'on_hit'):  # Fallback for scripts without tooltip info
+            lines.append("Special Effects:")
+            # Check type by name instead of instance
+            if item.name == "Iron Sword":
+                lines.append("• 10% chance to cause bleeding")
+                lines.append("• Bleeding deals 1 damage/second")
+                lines.append("• Effect lasts 5 seconds")
 
-    # Add existing properties
+    # Add other properties
+    if hasattr(item, 'burn_time') and item.burn_time:
+        lines.append(f"Burn time: {item.burn_time/1000:.1f}s")
     if hasattr(item, 'stack_size'):
         lines.append(f"Stack size: {item.stack_size}")
     if hasattr(item, 'is_block') and item.is_block:

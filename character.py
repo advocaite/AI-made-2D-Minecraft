@@ -96,6 +96,16 @@ class Character:
         world_height = world_info["world_height"]
         world_chunks = world_info["world_chunks"]
 
+        # Get weapon info
+        weapon = self.inventory.get_selected_item() if self.inventory else None
+        weapon_item = weapon["item"] if weapon and weapon.get("item") else None
+        base_damage = 1  # Default damage
+
+        # Calculate weapon damage including enhancements
+        if weapon_item and hasattr(weapon_item, "modifiers"):
+            base_damage += weapon_item.modifiers.get("damage", 0)
+            print(f"[ATTACK] Using {weapon_item.name} with {base_damage} damage")
+
         attack_range = 20  # collision distance in pixels
         if self.facing == "right":
             attack_rect = pygame.Rect(self.rect.right, self.rect.top, attack_range, self.rect.height)
@@ -107,8 +117,15 @@ class Character:
         for mob in mobs:
             if attack_rect.colliderect(mob.rect):
                 if mob.is_alive:  # Only damage living mobs
-                    mob.health -= 10  # Example damage value
-                    print(f"Attack hit mob: {mob} - Health remaining: {mob.health}")
+                    # Apply weapon effects first
+                    if weapon_item and hasattr(weapon_item, "on_hit"):
+                        print(f"[ATTACK] Applying {weapon_item.name} effects")
+                        weapon_item.on_hit(mob)
+
+                    # Then deal damage
+                    mob.health -= base_damage
+                    print(f"[ATTACK] Hit mob for {base_damage} damage. Health remaining: {mob.health}")
+                    
                     if mob.health <= 0:
                         mob.is_alive = False
                         mob.death_triggered = True
@@ -386,3 +403,32 @@ class Character:
         self.health = min(self.health, self.current_stats["health"])  # Cap health at max
         
         print(f"Updated modifiers: {self.current_stats}")
+
+    def attack(self, mobs):
+        """Handle attack with equipped weapon"""
+        if not self.attacking or not self.inventory:
+            return
+            
+        weapon = self.inventory.get_selected_item()
+        if not weapon or not weapon.get("item"):
+            return
+            
+        weapon_item = weapon["item"]
+        attack_rect = self._get_attack_hitbox()
+        
+        # Check for hits on mobs
+        for mob in mobs:
+            if mob.rect.colliderect(attack_rect):
+                # Base damage
+                damage = 1
+                if hasattr(weapon_item, "modifiers"):
+                    damage += weapon_item.modifiers.get("damage", 0)
+                    
+                # Apply weapon's on_hit effect BEFORE damage
+                print(f"[CHARACTER] Attacking with {weapon_item.name}")
+                weapon_item.on_hit(mob)
+                    
+                # Deal damage after effects
+                mob.take_damage(damage)
+                print(f"Hit mob with {weapon_item.name} for {damage} damage")
+                break

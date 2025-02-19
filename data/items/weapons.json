@@ -3,12 +3,14 @@
         "category": "weapon",
         "id": 400,
         "name": "Iron Sword",
-        "texture_coords": [14, 0],
+        "texture_coords": [30, 3],
         "stack_size": 1,
         "modifiers": {
             "damage": 10,
             "attack_speed": 1.0
         },
-        "script": "scripts/iron_sword.py"
+        "scripts": [
+            "iron_sword.py"
+        ]
     }
 }

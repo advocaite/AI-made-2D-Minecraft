@@ -1,7 +1,7 @@
 {
     "IRON_SWORD_SHARPNESS": {
         "base_item": {
-            "item_id": 40,
+            "item_id": 400,
             "name": "Iron Sword"
         },
         "ingredients": [{
@@ -17,7 +17,7 @@
     },
     "IRON_SWORD_FLAME": {
         "base_item": {
-            "item_id": 40,
+            "item_id": 400,
             "name": "Iron Sword"
         },
         "ingredients": [{
