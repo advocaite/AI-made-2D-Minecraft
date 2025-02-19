@@ -132,59 +132,37 @@ class ItemScript:
     def create_item(self, item_id, data, category):
         """Create an item instance with proper attributes"""
         try:
-            from item import Item, ITEM_REGISTRY, MELTABLE_ITEMS
+            from item import Item, ITEM_REGISTRY
             
-            # Create base item
+            # Create base item with all possible attributes
             item = Item(
-                id=int(data['id']),
+                id=str(data['id']),  # Convert ID to string
                 name=str(data['name']),
                 texture_coords=tuple(data['texture_coords']),
-                stack_size=int(data.get('stack_size', 64))
+                stack_size=int(data.get('stack_size', 64)),
+                is_block=False,  # JSON items are not blocks by default
+                burn_time=data.get('burn_time', 0)
             )
             
-            # Handle melt results from block data
-            if "melt_result" in data:
-                result_name = data["melt_result"]
-                if result_name in ITEM_REGISTRY:
-                    result_item = ITEM_REGISTRY[result_name]
-                    MELTABLE_ITEMS[item.id] = result_item
-                    print(f"Added melt result for {item.name}: {result_item.name}")
+            # Set category/type
+            item.type = data.get('category', 'material')
             
-            # Apply burn time if specified
-            if "burn_time" in data:
-                item.burn_time = data["burn_time"]
+            # Handle special categories
+            if item.type == 'seed':
+                item.is_seed = True
+                # Store plant data if available
+                if 'plant_data' in data:
+                    item.plant_data = data['plant_data']
+            
+            # Register with string ID
+            ITEM_REGISTRY[str(item.id)] = item
+            print(f"[ITEM LOADER] Created and registered item: {item.name} (ID: {item.id}, Type: {item.type})")
             
             return item
             
         except Exception as e:
-            print(f"Error creating item {item_id}: {e}")
+            print(f"[ITEM LOADER] Error creating item {item_id}: {e}")
             return None
-
-    def load_all_items(self):
-        """Load all item definitions from JSON files"""
-        if not self.data_dir.exists():
-            print(f"Warning: Data directory {self.data_dir} does not exist")
-            return
-
-        all_item_data = {}
-        for file in self.data_dir.glob("*.json"):
-            try:
-                with open(file, encoding='utf-8') as f:
-                    items = json.load(f)
-                    for item_id, item_data in items.items():
-                        # Ensure all strings are properly decoded
-                        decoded_data = self._decode_data(item_data)
-                        all_item_data[item_id] = (decoded_data, file.stem)
-            except Exception as e:
-                print(f"Error loading {file}: {e}")
-                continue
-
-        # Process items after all data is loaded
-        for item_id, (data, category) in all_item_data.items():
-            item = self.create_item(item_id, data, category)
-            if item:
-                self.items[item_id] = item
-                print(f"Loaded {item.name} from {category}")
 
     def load_items(self):
         """Load all item definitions from JSON files"""
@@ -192,25 +170,36 @@ class ItemScript:
             print(f"Warning: Data directory {self.data_dir} does not exist")
             return
 
-        all_item_data = {}
+        print(f"Looking for item files in: {self.data_dir}")
+        
         for file in self.data_dir.glob("*.json"):
+            print(f"\nProcessing item file: {file}")
             try:
                 with open(file, encoding='utf-8') as f:
                     items = json.load(f)
+                    print(f"Found {len(items)} items in {file.name}")
+                    
                     for item_id, item_data in items.items():
-                        # Ensure all strings are properly decoded
-                        decoded_data = self._decode_data(item_data)
-                        all_item_data[item_id] = (decoded_data, file.stem)
+                        try:
+                            # Process inheritance if any
+                            processed_data = self.process_inheritance(item_data, self.items)
+                            
+                            # Create and register the item
+                            item = self.create_item(item_id, processed_data, file.stem)
+                            if item:
+                                self.items[item_id] = item
+                                print(f"Successfully loaded item: {item.name} from {file.name}")
+                            
+                        except Exception as e:
+                            print(f"Error processing item {item_id}: {e}")
+                            continue
+                            
             except Exception as e:
                 print(f"Error loading {file}: {e}")
                 continue
 
-        # Process items after all data is loaded
-        for item_id, (data, category) in all_item_data.items():
-            item = self.create_item(item_id, data, category)
-            if item:
-                self.items[item_id] = item
-                print(f"Loaded {item.name} from {category}")
+        print(f"\nTotal items loaded: {len(self.items)}")
+        print("Item Registry contents:", self.items.keys())
 
     def _decode_data(self, data):
         """Recursively decode all strings in the data structure"""

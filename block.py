@@ -22,16 +22,26 @@ class Block:
 
     # NEW: Helper method to get the block texture with tint applied if set.
     def get_texture(self, atlas):
+        # Clear texture cache if coordinates changed
+        if hasattr(self, '_last_coords') and self._last_coords != self.texture_coords:
+            if hasattr(self, '_cached_base'):
+                del self._cached_base
+            if hasattr(self, '_cached_texture'):
+                del self._cached_texture
+        self._last_coords = self.texture_coords
+
         # Special case for AIR - return None to indicate no texture
-        if self.id == 0:  # AIR block
+        if self.id == 0:
             return None
 
-        # Rest of texture handling for non-AIR blocks
-        if not hasattr(self, "_cached_base"):
+        # Generate texture
+        if not hasattr(self, '_cached_base'):
             block_size = c.BLOCK_SIZE
             tx, ty = self.texture_coords
             texture_rect = pygame.Rect(tx * block_size, ty * block_size, block_size, block_size)
             self._cached_base = atlas.subsurface(texture_rect).convert_alpha()
+            #print(f"[TEXTURE] Created new texture for {self.name} at {self.texture_coords}")
+
         if not self.tint:
             return self._cached_base
         if not hasattr(self, "_cached_texture"):
@@ -244,10 +254,18 @@ class FarmingBlock(Block):
                         animation_frames, frame_duration, tint, entity_type)
         self.has_inventory = True
         self.can_interact = True
-        self.plantable = True
+        
+        # Import and create script right away
+        from scripts.blocks.farming_block import BlockScript
+        self.script = BlockScript(self)
+        # For backward compatibility
+        self.plantable = self.script.plantable
+        self.plant = self.script.plant
+        self.tilled = self.script.tilled
 
     def create_instance(self):
         """Create a new instance of the farming block"""
+        print("[FARM DEBUG] Creating new FarmingBlock instance")
         new_block = FarmingBlock(
             self.id, 
             self.name, 
@@ -255,9 +273,67 @@ class FarmingBlock(Block):
             solid=self.solid,
             color=self.color
         )
+        # Ensure script is initialized properly
+        from scripts.blocks.farming_block import BlockScript
+        new_block.script = BlockScript(new_block)
         new_block.item_variant = self.item_variant
         new_block.drop_item = self.drop_item
+        
+        print(f"[FARM DEBUG] Created block: texture={new_block.texture_coords}, tilled={new_block.script.tilled}")
         return new_block
+        
+    def till(self):
+        """Delegate to script"""
+        if self.script:
+            print(f"[FARM DEBUG] Till requested on block: {self.texture_coords}")
+            result = self.script.till()
+            # Force texture update
+            if hasattr(self, '_cached_base'):
+                del self._cached_base
+            print(f"[FARM DEBUG] Till result: {result}, New texture: {self.texture_coords}")
+            return result
+        return False
+
+    def plant_seed(self, seed_item):
+        """Delegate to script"""
+        result = self.script.plant_seed(seed_item)
+        self.plant = self.script.plant  # Update proxy property
+        return result
+
+    def update(self, dt):
+        """Delegate to script"""
+        if self.script:
+            result = self.script.update(dt)
+            # Update proxy properties
+            self.plant = self.script.plant
+            self.tilled = self.script.tilled
+            return result
+        return False
+
+    def harvest(self, tool=None):
+        """Delegate to script"""
+        result = self.script.harvest(tool)
+        self.plant = self.script.plant  # Update proxy property
+        return result
+
+    def to_dict(self):
+        """Serialize farming block state"""
+        data = super().to_dict()
+        if self.script:
+            data.update({
+                'farming_data': self.script.to_dict()
+            })
+        return data
+
+    def from_dict(self, data, item_registry):
+        """Deserialize farming block state"""
+        super().from_dict(data, item_registry)
+        if self.script and 'farming_data' in data:
+            self.script.from_dict(data['farming_data'], item_registry)
+            # Update proxy properties
+            self.plant = self.script.plant
+            self.tilled = self.script.tilled
+            self.plantable = self.script.plantable
 
 # Update WOOD block creation with burn time
 WOOD = Block(19, "Wood", True, (139, 69, 19), (1, 13))
@@ -323,7 +399,15 @@ IRON_ORE = Block(17, "Iron Ore", True, (136, 132, 132), (0, 12))
 GOLD_ORE = Block(18, "Gold Ore", True, (204, 172, 0), (0, 10))
 
 # Add special blocks
-SPAWNER = Block(22, "Spawner", True, (255, 0, 0), (5, 5), entity_type="mob")
+SPAWNER = Block(
+    id=22, 
+    name="Spawner", 
+    solid=True, 
+    color=(255, 0, 0), 
+    texture_coords=(5, 5),
+    entity_type="mob",
+    tint=(255, 100, 100, 128)  # Add tint to make it more visible
+)
 STORAGE = StorageBlock(23, "Storage", (15, 1))
 FURNACE = FurnaceBlock(
     id=24,

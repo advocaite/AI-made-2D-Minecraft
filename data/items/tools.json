@@ -20,5 +20,17 @@
         "modifiers": {
             "damage": 8
         }
+    },
+    "IRON_HOE": {
+        "category": "hoe",
+        "id": 403,
+        "name": "Iron Hoe",
+        "texture_coords": [17, 0],
+        "stack_size": 1,
+        "is_tool": true,
+        "effective_against": ["Farmland"],
+        "modifiers": {
+            "damage": 3
+        }
     }
 }

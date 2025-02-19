@@ -158,6 +158,15 @@ def main():
     hunger_bar = ProgressBar(10, c.SCREEN_HEIGHT - 60, 200, 20, color=(139, 69, 19))
     thirst_bar = ProgressBar(10, c.SCREEN_HEIGHT - 30, 200, 20, color=(0, 191, 255))
 
+    # NEW: Track spawned mobs per spawner
+    spawner_mobs = {}  # Key: (chunk_index, x, y), Value: list of spawned mobs
+
+    # Add debug for spawner state tracking 
+    spawner_debug = {
+        'last_check': 0,
+        'active_spawners': set()
+    }
+
     while True:
         dt = clock.tick(60)  # milliseconds since last frame
         # Reset placement flags when mouse buttons are released:
@@ -301,19 +310,35 @@ def main():
                         # Check if block is FarmingBlock and player has hoe selected
                         if isinstance(block, b.FarmingBlock) and selected and selected.get("item"):
                             item = selected["item"]
-                            print(f"DEBUG: Selected item type: {item.type}")  # Add debug output
+                            print(f"[FARM DEBUG] Right click with {item.name}")
+                            print(f"[FARM DEBUG] Block state - Tilled: {block.script.tilled}, Has plant: {block.script.plant}")
                             
-                            # Check specifically for hoe type
-                            if item.type == "hoe" and not block.tilled:
+                            # Check for hoe
+                            is_hoe = (item.type == "hoe" or 
+                                     getattr(item, 'category', '') == "hoe" or 
+                                     item.name.lower().endswith('hoe'))
+                            
+                            if is_hoe and not block.script.tilled:
                                 block.till()
-                                print(f"Tilled soil at ({world_x}, {world_y})")
+                                print(f"[FARM DEBUG] Tilled soil at ({world_x}, {world_y})")
                                 continue
-                            # Handle seed planting separately
-                            elif hasattr(item, 'is_seed') and item.is_seed and block.tilled:
-                                if block.plant_seed(item):
+                            
+                            # Handle seed planting
+                            if hasattr(item, 'is_seed') and item.is_seed and block.script.tilled:
+                                if block.script.plant_seed(item):
+                                    print(f"[FARM DEBUG] Successfully planted {item.name}")
                                     player_inventory.update_quantity(selected, -1)
-                                    print(f"Planted {item.name}")
                                     continue
+                            
+                            # Handle harvesting fully grown plants
+                            if block.script.plant and block.script.plant.is_fully_grown():
+                                print(f"[FARM DEBUG] Harvesting fully grown plant")
+                                drops = block.script.harvest()
+                                if drops:
+                                    for item, quantity in drops:
+                                        player_inventory.add_item(item, quantity)
+                                    print(f"[FARM DEBUG] Added harvest to inventory")
+                                continue
 
                         # Handle other block interactions...
                         if isinstance(block, b.StorageBlock):
@@ -802,42 +827,76 @@ def main():
         # Draw console on top of the game if active
         console.draw(screen)
 
-        # Check for player proximity to spawner blocks and spawn entities
+        # Update spawner debug stats every 5 seconds
+        current_time = pygame.time.get_ticks()
+        if current_time - spawner_debug['last_check'] > 5000:
+            spawner_debug['last_check'] = current_time
+            print("\n[SPAWNER DEBUG] Status:")
+            print(f"Active spawners: {len(spawner_debug['active_spawners'])}")
+            print(f"Total mobs: {len(mobs)}")
+            print(f"Spawner locations: {list(spawner_debug['active_spawners'])}\n")
+
+        # Replace the spawner section with this improved version
         for ci, chunk in world_chunks.items():
             for y, row in enumerate(chunk):
                 for x, block_obj in enumerate(row):
-                    if block_obj == b.SPAWNER:
+                    if isinstance(block_obj, b.Block) and block_obj.id == 22:  # Check explicitly for spawner ID
+                        spawner_pos = (ci, x, y)
                         spawner_x = ci * chunk_width * block_size + x * block_size
                         spawner_y = y * block_size
-                        distance = math.sqrt((player.rect.x - spawner_x) ** 2 + (player.rect.y - spawner_y) ** 2)
+                        
+                        # Calculate distance to player in pixels
+                        dx = player.rect.centerx - (spawner_x + block_size/2)
+                        dy = player.rect.centery - (spawner_y + block_size/2)
+                        distance = math.sqrt(dx*dx + dy*dy)
+                        
+                        #print(f"[SPAWNER] Found spawner at ({spawner_x}, {spawner_y}), distance: {distance}")
+                        
                         if distance < c.SPAWNER_RADIUS:
+                            spawner_debug['active_spawners'].add(spawner_pos)
                             current_time = pygame.time.get_ticks()
-                            if (ci, x, y) not in last_spawn_time or current_time - last_spawn_time[(ci, x, y)] > c.SPAWN_COOLDOWN:
-                                # Try to spawn mob at a random air block around the spawner
-                                found_spawn = False
-                                for attempt in range(10):
-                                    offset_x = random.randint(-c.SPAWNER_RADIUS, c.SPAWNER_RADIUS)
-                                    offset_y = random.randint(-c.SPAWNER_RADIUS, c.SPAWNER_RADIUS)
-                                    new_spawn_x = spawner_x + offset_x
-                                    new_spawn_y = spawner_y + offset_y
-                                    block_x = new_spawn_x // block_size
-                                    block_y = new_spawn_y // block_size
-                                    new_ci = block_x // chunk_width
-                                    new_local_x = block_x % chunk_width
-                                    if new_ci in world_chunks and block_y < world_height:
-                                        if world_chunks[new_ci][block_y][new_local_x] == b.AIR:
-                                            new_mob = Mob(new_spawn_x, new_spawn_y)
+                            
+                            # Check if we can spawn
+                            if spawner_pos not in last_spawn_time:
+                                last_spawn_time[spawner_pos] = 0
+                                #print(f"[SPAWNER] Initializing new spawner at {spawner_pos}")
+                            
+                            if current_time - last_spawn_time[spawner_pos] > c.SPAWN_COOLDOWN:
+                                # Count existing mobs from this spawner
+                                spawner_mob_count = sum(1 for mob in mobs if hasattr(mob, 'spawner') and mob.spawner == spawner_pos)
+                                #print(f"[SPAWNER] Current mob count for spawner: {spawner_mob_count}")
+                                
+                                if spawner_mob_count < c.MAX_MOBS_PER_SPAWNER:
+                                    #print(f"[SPAWNER] Attempting spawn near ({spawner_x}, {spawner_y})")
+                                    # Try to spawn around the spawner
+                                    for _ in range(10):  # Try 10 times to find valid spot
+                                        offset_x = random.randint(-50, 50)
+                                        offset_y = random.randint(-50, 50)
+                                        spawn_x = spawner_x + offset_x
+                                        spawn_y = spawner_y + offset_y
+                                        
+                                        # Convert to block coordinates
+                                        block_x = spawn_x // block_size
+                                        block_y = spawn_y // block_size
+                                        chunk_i = block_x // chunk_width
+                                        local_x = block_x % chunk_width
+                                        
+                                        # Verify spawn location
+                                        if (chunk_i in world_chunks and 
+                                            0 <= block_y < world_height - 1 and
+                                            world_chunks[chunk_i][block_y][local_x] == b.AIR and
+                                            world_chunks[chunk_i][block_y + 1][local_x] != b.AIR):  # Must have ground below
+                                            
+                                            new_mob = Mob(spawn_x, spawn_y)
+                                            new_mob.spawner = spawner_pos  # Track which spawner created this mob
                                             mobs.append(new_mob)
-                                            last_spawn_time[(ci, x, y)] = current_time
-                                            print(f"Spawned new mob at ({new_spawn_x}, {new_spawn_y})")
-                                            found_spawn = True
+                                            last_spawn_time[spawner_pos] = current_time
+                                           # print(f"[SPAWNER] Successfully spawned mob at ({spawn_x}, {spawn_y})")
                                             break
-                                if not found_spawn:
-                                    # Fallback to spawner coordinates if no valid air block was found
-                                    new_mob = Mob(spawner_x, spawner_y)
-                                    mobs.append(new_mob)
-                                    last_spawn_time[(ci, x, y)] = current_time
-                                    print(f"Spawned fallback mob at ({spawner_x}, {spawner_y})")
+                        else:
+                            if spawner_pos in spawner_debug['active_spawners']:
+                                spawner_debug['active_spawners'].remove(spawner_pos)
+                               # print(f"[SPAWNER] Deactivated spawner at {spawner_pos} (distance: {distance})")
 
         # Draw death menu last (after console)
         if death_menu and not player.is_alive:

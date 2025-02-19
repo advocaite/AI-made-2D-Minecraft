@@ -2,9 +2,20 @@ class Registry:
     def __init__(self):
         self.blocks = {}
         self.items = {}
-        self.meltable_items = {}
-        self.fuel_items = {}
-
+        
+        # Create base items dictionary
+        self.items = {}
+        
+        # Load items from JSON files first
+        from item_loader import ItemLoader
+        self.item_loader = ItemLoader()
+        self.item_loader.load_items()
+        
+        # Add loaded items to registry
+        self.items.update(self.item_loader.items)
+        
+        print("[REGISTRY] Initialized with items:", list(self.items.keys()))
+    
     def register_block(self, block):
         """Register a block and return it"""
         if isinstance(block, str):
@@ -58,8 +69,26 @@ class Registry:
         return None
 
     def get_item(self, item_id):
-        """Get an item by ID"""
-        return self.items.get(str(item_id))
+        """Get an item by ID or name"""
+        if isinstance(item_id, str):
+            # Try direct lookup first
+            item = self.items.get(item_id)
+            if item:
+                return item
+                
+            # Try numeric ID
+            item = self.items.get(str(item_id))
+            if item:
+                return item
+                
+            # Try case-insensitive name search
+            for key, value in self.items.items():
+                if value.name.upper() == item_id.upper():
+                    return value
+                    
+        print(f"[REGISTRY] Warning: Item '{item_id}' not found")
+        print(f"[REGISTRY] Available items: {list(self.items.keys())}")
+        return None
 
 # Create global registry instance
 REGISTRY = Registry()
