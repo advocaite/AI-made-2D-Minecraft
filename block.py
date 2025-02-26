@@ -385,8 +385,8 @@ SNOW_GRASS = Block(32, "Snow Grass", True, (248, 248, 248), (3, 20))
 SNOW_DIRT = Block(33, "Snow Dirt", True, (225, 225, 225), (8, 5))
 
 # Add these blocks after the existing predefined blocks but before registry
-LEAVES = Block(20, "Leaves", True, (34, 139, 34), (9, 12))
-LEAVESGG = Block(21, "Golden Leaves", True, (218, 165, 32), (9, 12))
+LEAVES = Block(20, "Leaves", True, (34, 139, 34), (9, 12), tint=(34, 139, 34, 128))  # Added tint
+LEAVESGG = Block(21, "Golden Leaves", True, (218, 165, 32), (9, 12), tint=(218, 165, 32, 128))  # Added tint
 SAVANNA_GRASS = Block(34, "Savanna Grass", True, (189, 188, 107), (8, 6))
 SAVANNA_DIRT = Block(35, "Savanna Dirt", True, (150, 120, 60), (8, 5))
 UNBREAKABLE = Block(8, "Unbreakable", True, (50, 50, 50), (4, 3))  # Add this line

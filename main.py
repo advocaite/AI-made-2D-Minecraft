@@ -1,33 +1,33 @@
 import pygame
 import math
+import random
+import time
+import block as b
 from worldgen import generate_chunk
-import random  # ensure random is imported at the top if not already
-import config as c # ensure config is imported at the top if not already a
-import block as b  # new import for Block definitions
-from sound_manager import SoundManager  # new import
-from character import Character  # new import
+import config as c
+from sound_manager import SoundManager
+from character import Character
 from save_manager import SaveManager
-import inventory
-import inventory_ui
-from item import Item, IRON_PICKAXE, IRON_SWORD, IRON_AXE, APPLE, WATER_BOTTLE  # Fixed item names
-from world_item import WorldItem  # new import for WorldItem class
-from crafting_ui import CraftingUI  # new import
-from action_mode_controller import ActionModeController  # new import
-from console import Console  # new import
-from parallax_background import ParallaxBackground  # new import for parallax backgrounds
-from mob import Mob  # new import for Mob class
-from death_menu import DeathMenu  # new import
-from storage_ui import StorageUI  # new import
-from furnace_ui import FurnaceUI  # new import
-from enhancer_ui import EnhancerUI  # Add this import
-from ui.progress_bar import ProgressBar  # Add this import
+from item import Item, IRON_PICKAXE, IRON_SWORD, IRON_AXE, APPLE, WATER_BOTTLE
+from world_item import WorldItem
+from crafting_ui import CraftingUI
+from action_mode_controller import ActionModeController
+from console import Console
+from parallax_background import ParallaxBackground
+from mob import Mob
+from death_menu import DeathMenu
+from storage_ui import StorageUI
+from furnace_ui import FurnaceUI
+from enhancer_ui import EnhancerUI
+from ui.progress_bar import ProgressBar
 from collections import deque
 from typing import Dict, Set
-import time
 import psutil
 import cProfile
 from async_chunk_manager import AsyncChunkManager
 from texture_manager import TextureManager
+import inventory
+import inventory_ui
 
 class World:
     def __init__(self):
@@ -102,10 +102,13 @@ class ChunkManager:
         """Optimized chunk rendering with texture manager"""
         if chunk_index in self.cached_surfaces:
             last_update = self.last_render_time.get(chunk_index, 0)
-            if time.time() - last_update < 1.0:
+            if time.time() - last_update < 0.016:  # Reduced from 1.0 to ~1 frame at 60fps
                 return self.cached_surfaces[chunk_index]
 
         surface = pygame.Surface((self.chunk_width * c.BLOCK_SIZE, c.WORLD_HEIGHT * c.BLOCK_SIZE), pygame.SRCALPHA)
+        
+        # Pre-calculate block size to avoid repeated lookups
+        block_size = c.BLOCK_SIZE
         
         # Group blocks by texture coordinates and tint
         render_batches = {}
@@ -114,16 +117,16 @@ class ChunkManager:
                 if block != b.AIR:
                     # Convert texture coordinates to tuple if they're a list
                     coords = tuple(block.texture_coords) if isinstance(block.texture_coords, list) else block.texture_coords
-                    key = (coords, block.tint if hasattr(block, 'tint') else None)
-                    if key not in render_batches:
-                        render_batches[key] = []
-                    render_batches[key].append((x, y))
-
-        # Render batches
-        for (coords, tint), positions in render_batches.items():
-            texture = self.texture_manager.get_texture(coords, tint)
+                    # Ensure tint has alpha channel
+                    tint = None
+                    if hasattr(block, 'tint') and block.tint:
+                        if len(block.tint) == 3:
+                            tint = (*block.tint, 128)  # Add alpha if missing
+                        else:
+                            tint = block.tint
+                    key = (coords, tint)
             for x, y in positions:
-                surface.blit(texture, (x * c.BLOCK_SIZE, y * c.BLOCK_SIZE))
+                surface.blit(texture, (x, y))
 
         self.cached_surfaces[chunk_index] = surface
         self.last_render_time[chunk_index] = time.time()
@@ -155,10 +158,10 @@ class ChunkManager:
         self.stats['chunks_rendered'] = len(self.visible_chunks)
 
     def invalidate_chunk(self, chunk_index):
-        """Mark a chunk for re-rendering"""
+        """Mark a chunk for re-rendering with immediate update flag"""
         if chunk_index in self.cached_surfaces:
             del self.cached_surfaces[chunk_index]
-            del self.last_render_time[chunk_index]
+            self.last_render_time[chunk_index] = 0  # Force immediate update
 
 def main():
     pygame.init()
@@ -270,6 +273,52 @@ def main():
     frame_times = deque(maxlen=60)
     profiler = cProfile.Profile()
     show_debug = False
+
+    def handle_block_break(chunk_index, local_x, world_y, block, player_inventory):
+        """Handle block breaking logic"""
+        selected = player_inventory.get_selected_item()
+        if selected and hasattr(selected["item"], "effective_against") and selected["item"].effective_against:
+            tool = selected["item"]
+            if block.name in tool.effective_against:
+                world_chunks[chunk_index][world_y][local_x] = b.AIR
+                if block.item_variant and block != b.AIR:
+                    player_inventory.add_item(block.item_variant, 1)
+                return True
+        else:
+            world_chunks[chunk_index][world_y][local_x] = b.AIR
+            if block.item_variant and block != b.AIR:
+                player_inventory.add_item(block.item_variant, 1)
+            return True
+        return False
+
+    def handle_block_place(chunk_index, local_x, world_y, player_inventory, player, block_size):
+        """Handle block placing logic"""
+        selected = player_inventory.get_selected_item()
+        if not (selected and selected.get("item")):
+            return False
+            
+        item_obj = selected["item"]
+        if not (item_obj.is_block and hasattr(item_obj, "block")):
+            return False
+            
+        block_to_place = item_obj.block
+        if isinstance(block_to_place, (b.StorageBlock, b.FurnaceBlock, b.EnhancerBlock)):
+            block_to_place = block_to_place.create_instance()
+            
+        block_world_rect = pygame.Rect(
+            chunk_index * chunk_width * block_size + local_x * block_size,
+            world_y * block_size,
+            block_size,
+            block_size
+        )
+        
+        if (world_chunks[chunk_index][world_y][local_x] == b.AIR and 
+            not player.rect.colliderect(block_world_rect)):
+            world_chunks[chunk_index][world_y][local_x] = block_to_place
+            player_inventory.update_quantity(selected, -1)
+            return True
+            
+        return False
 
     while True:
         start_time = time.time()
@@ -667,27 +716,35 @@ def main():
                 # Left click: break block (one per click)
                 if mouse_buttons[0] and world_chunks[chunk_index][world_y][local_x] != b.UNBREAKABLE and not broken_block:
                     block = world_chunks[chunk_index][world_y][local_x]
-                    # Add check to prevent breaking AIR blocks
                     if block == b.AIR:
                         continue
+                        
                     selected = player_inventory.get_selected_item()
+                    broken = False
+                    
+                    # Handle tool-specific breaking
                     if selected and hasattr(selected["item"], "effective_against") and selected["item"].effective_against:
                         tool = selected["item"]
                         if block.name in tool.effective_against:
                             world_chunks[chunk_index][world_y][local_x] = b.AIR
-                            broken_block = True
-                            if block.item_variant and block != b.AIR:  # Double check against AIR
+                            if block.item_variant and block != b.AIR:
                                 player_inventory.add_item(block.item_variant, 1)
-                            print(f"Effective break: {block.name} with {tool.name}")
-                        else:
-                            print(f"{tool.name} is not effective against {block.name}")
+                            broken = True
                     else:
                         world_chunks[chunk_index][world_y][local_x] = b.AIR
-                        broken_block = True
-                        if block.item_variant and block != b.AIR:  # Double check against AIR
+                        if block.item_variant and block != b.AIR:
                             player_inventory.add_item(block.item_variant, 1)
-                        print(f"Breaking block: {block.name}, drop_item: {block.drop_item}")
-                    chunk_manager.invalidate_chunk(chunk_index)
+                        broken = True
+                        
+                    if broken:
+                        broken_block = True
+                        # Force immediate chunk update
+                        chunk_manager.invalidate_chunk(chunk_index)
+                        # Check if we need to update adjacent chunks (for connected textures)
+                        if local_x == 0 and chunk_index - 1 in world_chunks:
+                            chunk_manager.invalidate_chunk(chunk_index - 1)
+                        elif local_x == chunk_width - 1 and chunk_index + 1 in world_chunks:
+                            chunk_manager.invalidate_chunk(chunk_index + 1)
                 # Right click: process placement in action mode
                 if mouse_buttons[2] and not placed_water:  # Right click
                     selected = player_inventory.get_selected_item()
@@ -1043,50 +1100,4 @@ def main():
         
 if __name__ == "__main__":
     main()
-
-def handle_block_break(chunk_index, local_x, world_y, block, player_inventory):
-    """Handle block breaking logic"""
-    selected = player_inventory.get_selected_item()
-    if selected and hasattr(selected["item"], "effective_against") and selected["item"].effective_against:
-        tool = selected["item"]
-        if block.name in tool.effective_against:
-            world_chunks[chunk_index][world_y][local_x] = b.AIR
-            if block.item_variant and block != b.AIR:
-                player_inventory.add_item(block.item_variant, 1)
-            return True
-    else:
-        world_chunks[chunk_index][world_y][local_x] = b.AIR
-        if block.item_variant and block != b.AIR:
-            player_inventory.add_item(block.item_variant, 1)
-        return True
-    return False
-
-def handle_block_place(chunk_index, local_x, world_y, player_inventory, player, block_size):
-    """Handle block placing logic"""
-    selected = player_inventory.get_selected_item()
-    if not (selected and selected.get("item")):
-        return False
-        
-    item_obj = selected["item"]
-    if not (item_obj.is_block and hasattr(item_obj, "block")):
-        return False
-        
-    block_to_place = item_obj.block
-    if isinstance(block_to_place, (b.StorageBlock, b.FurnaceBlock, b.EnhancerBlock)):
-        block_to_place = block_to_place.create_instance()
-        
-    block_world_rect = pygame.Rect(
-        chunk_index * chunk_width * block_size + local_x * block_size,
-        world_y * block_size,
-        block_size,
-        block_size
-    )
-    
-    if (world_chunks[chunk_index][world_y][local_x] == b.AIR and 
-        not player.rect.colliderect(block_world_rect)):
-        world_chunks[chunk_index][world_y][local_x] = block_to_place
-        player_inventory.update_quantity(selected, -1)
-        return True
-        
-    return False
 

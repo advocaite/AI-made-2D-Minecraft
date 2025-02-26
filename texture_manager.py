@@ -61,35 +61,37 @@ class TextureManager:
 
     def get_texture(self, coords, tint=None):
         """Get a cached texture with optimized batching"""
-        cache_key = (coords, tint) if tint else coords
+        cache_key = (coords, tuple(tint) if isinstance(tint, (list, tuple)) else tint)
         
-        if cache_key not in self.texture_cache:
-            # Get texture coordinates from packer
-            texture_id = f"{coords[0]}_{coords[1]}"
-            tex_coords = self.packer.get_texture_coords(texture_id)
+        if cache_key in self.texture_cache:
+            return self.texture_cache[cache_key]
             
-            # Create texture from atlas region
-            region = pygame.Surface((c.BLOCK_SIZE, c.BLOCK_SIZE), pygame.SRCALPHA)
-            region.blit(
-                self.atlas_surface,
-                (0, 0),
-                (
-                    tex_coords[0] * self.atlas_surface.get_width(),
-                    tex_coords[1] * self.atlas_surface.get_height(),
-                    c.BLOCK_SIZE,
-                    c.BLOCK_SIZE
-                )
+        # Get texture coordinates from packer
+        texture_id = f"{coords[0]}_{coords[1]}"
+        tex_coords = self.packer.get_texture_coords(texture_id)
+        
+        # Create texture from atlas region
+        region = pygame.Surface((c.BLOCK_SIZE, c.BLOCK_SIZE), pygame.SRCALPHA)
+        region.blit(
+            self.atlas_surface,
+            (0, 0),
+            (
+                tex_coords[0] * self.atlas_surface.get_width(),
+                tex_coords[1] * self.atlas_surface.get_height(),
+                c.BLOCK_SIZE,
+                c.BLOCK_SIZE
             )
-            
-            # Apply tint if needed
-            if tint:
-                tinted = region.copy()
-                tinted.fill(tint, special_flags=pygame.BLEND_RGBA_MULT)
-                self.texture_cache[cache_key] = tinted
-            else:
-                self.texture_cache[cache_key] = region
+        )
         
-        return self.texture_cache[cache_key]
+        # Apply tint if needed
+        if tint:
+            tinted = region.copy()
+            tinted.fill(tint, special_flags=pygame.BLEND_RGBA_MULT)
+            self.texture_cache[cache_key] = tinted
+            return tinted
+            
+        self.texture_cache[cache_key] = region
+        return region
 
     def begin_batch(self, batch_id: str):
         """Start a new rendering batch"""
