@@ -2,6 +2,7 @@ import pygame
 import config as c
 from item import Item  # Ensure Item is imported
 from ui_tooltip import Tooltip, get_item_tooltip
+from ui_manager import UIManager
 
 class InventoryUI:
     def __init__(self, screen, inventory, atlas):
@@ -25,6 +26,14 @@ class InventoryUI:
         self.hovered_item = None
         self.selected_slot = None  # Add this line to initialize selected_slot
         self.texture_atlas = atlas  # Add this line to fix texture_atlas reference
+
+        # Add frame tracking variables
+        self._last_frame_items = {}
+        self._last_frame_hotbar = {}
+
+        self.ui_manager = UIManager(screen)
+        self.inventory_batch = self.ui_manager.create_batch('inventory')
+        self.hotbar_batch = self.ui_manager.create_batch('hotbar')
 
     def can_equip_in_armor_slot(self, item, slot_index):
         """Check if an item can be equipped in the given armor slot"""
@@ -202,54 +211,97 @@ class InventoryUI:
         self.dragging_index = None
 
     def draw(self):
-        # Get current mouse position and update hovered item
-        mouse_pos = pygame.mouse.get_pos()
-        self.get_slot_at_pos(mouse_pos)  # This updates self.hovered_item
-
+        """Draw the inventory UI with batched rendering"""
+        self.ui_manager.begin_frame()
+        
+        # Draw background
         self.screen.fill((30, 30, 30))
-        # Draw UI overlay background
-        overlay = pygame.Surface((c.SCREEN_WIDTH, c.SCREEN_HEIGHT), flags=pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 200))
-        self.screen.blit(overlay, (0,0))
+        bg_overlay = pygame.Surface((c.SCREEN_WIDTH, c.SCREEN_HEIGHT), pygame.SRCALPHA)
+        bg_overlay.fill((0, 0, 0, 200))
+        self.screen.blit(bg_overlay, (0, 0))
 
-        # Draw title text
-        title = pygame.font.SysFont(None, 48).render("Inventory", True, (255, 255, 255))
-        title_rect = title.get_rect(center=(c.SCREEN_WIDTH//2, 50))
-        self.screen.blit(title, title_rect)
+        # Draw section titles
+        title_color = (200, 200, 200)
+        inventory_title = self.font.render("Inventory", True, title_color)
+        armor_title = self.font.render("Equipment", True, title_color)
+        hotbar_title = self.font.render("Hotbar", True, title_color)
 
-        # Draw Armor Grid (slots 10-15)
-        armor_top_left = (c.SCREEN_WIDTH//2 - 1.5*(self.slot_size + self.padding), 100)
-        self.draw_grid(self.inventory.armor, armor_top_left, 3)
-        # Draw label for Armor
-        armor_label = self.font.render("Armor", True, (255, 255, 255))
-        armor_label_rect = armor_label.get_rect(center=(c.SCREEN_WIDTH//2, 100 - 20))
-        self.screen.blit(armor_label, armor_label_rect)
+        # Draw titles
+        self.screen.blit(armor_title, (c.SCREEN_WIDTH//2 - armor_title.get_width()//2, 70))
+        self.screen.blit(inventory_title, (c.SCREEN_WIDTH//2 - inventory_title.get_width()//2, 220))
+        self.screen.blit(hotbar_title, (c.SCREEN_WIDTH//2 - hotbar_title.get_width()//2, 
+                                      c.SCREEN_HEIGHT - self.slot_size - 70))
 
-        # Draw Main Inventory Grid (slots 16-47)
-        main_top_left = (c.SCREEN_WIDTH//2 - 4*(self.slot_size + self.padding), 250)
-        self.draw_grid(self.inventory.main, main_top_left, 8)
-        # Draw label for Main Inventory
-        main_label = self.font.render("Main Inventory", True, (255, 255, 255))
-        main_label_rect = main_label.get_rect(center=(c.SCREEN_WIDTH//2, 250 - 20))
-        self.screen.blit(main_label, main_label_rect)
+        # First pass: Draw all slot backgrounds
+        # Draw armor slot backgrounds
+        for i in range(len(self.inventory.armor)):
+            pos = self._get_armor_pos(i)
+            pygame.draw.rect(self.screen, (60, 60, 80), (*pos, self.slot_size, self.slot_size))
+            pygame.draw.rect(self.screen, (120, 120, 140), (*pos, self.slot_size, self.slot_size), 1)
 
-        self.draw_hotbar_ui()
+        # Draw inventory slot backgrounds
+        for i in range(len(self.inventory.main)):
+            pos = self._get_inventory_pos(i)
+            pygame.draw.rect(self.screen, (50, 50, 50), (*pos, self.slot_size, self.slot_size))
+            pygame.draw.rect(self.screen, (100, 100, 100), (*pos, self.slot_size, self.slot_size), 1)
 
-        # Draw the dragging item if any.
+        # Draw hotbar slot backgrounds
+        for i in range(len(self.inventory.hotbar)):
+            pos = self._get_hotbar_pos(i)
+            pygame.draw.rect(self.screen, (50, 50, 50), (*pos, self.slot_size, self.slot_size))
+            pygame.draw.rect(self.screen, (100, 100, 100), (*pos, self.slot_size, self.slot_size), 1)
+            if i == self.inventory.selected_hotbar_index:
+                pygame.draw.rect(self.screen, (255, 215, 0), 
+                               (pos[0]-2, pos[1]-2, self.slot_size+4, self.slot_size+4), 2)
+
+        # Second pass: Draw items and quantities
+        # Draw armor slots
+        for i, slot in enumerate(self.inventory.armor):
+            if slot is None:
+                slot = {"item": None, "quantity": 0}
+            slot_id = f"armor_slot_{i}"
+            surface = self._render_armor_slot(slot, i)
+            self.ui_manager.draw_ui_element(self.inventory_batch, slot_id, surface, 
+                                          self._get_armor_pos(i), True)
+
+        # Draw inventory slots
+        for i, slot in enumerate(self.inventory.main):
+            if slot is None:
+                slot = {"item": None, "quantity": 0}
+            slot_id = f"inv_slot_{i}"
+            surface = self._render_slot(slot, i)
+            self.ui_manager.draw_ui_element(self.inventory_batch, slot_id, surface, 
+                                          self._get_inventory_pos(i), True)
+
+        # Draw hotbar slots
+        for i, slot in enumerate(self.inventory.hotbar):
+            if slot is None:
+                slot = {"item": None, "quantity": 0}
+            slot_id = f"hotbar_slot_{i}"
+            surface = self._render_hotbar_slot(slot, i)
+            self.ui_manager.draw_ui_element(self.hotbar_batch, slot_id, surface,
+                                          self._get_hotbar_pos(i), True)
+
+        # Update cached states
+        self._last_frame_items = {
+            i: dict(slot) if slot is not None else {"item": None, "quantity": 0} 
+            for i, slot in enumerate(self.inventory.main)
+        }
+        for i, slot in enumerate(self.inventory.armor):
+            self._last_frame_items[f"armor_{i}"] = dict(slot) if slot is not None else {"item": None, "quantity": 0}
+        self._last_frame_hotbar = {
+            i: dict(slot) if slot is not None else {"item": None, "quantity": 0} 
+            for i, slot in enumerate(self.inventory.hotbar)
+        }
+
+        # Draw dragged item last
         if self.dragging_item:
-            item = self.dragging_item["item"]
-            if item:
-                tx, ty = item.texture_coords
-                block_size = c.BLOCK_SIZE
-                texture_rect = pygame.Rect(tx * block_size, ty * block_size, block_size, block_size)
-                item_img = self.atlas.subsurface(texture_rect)
-                item_img = pygame.transform.scale(item_img, (self.slot_size, self.slot_size))
-                self.screen.blit(item_img, (self.drag_pos["x"], self.drag_pos["y"]))
-                if self.dragging_item.get("quantity", 0) > 1:
-                    amount_surf = self.font.render(str(self.dragging_item["quantity"]), True, (255, 255, 255))
-                    self.screen.blit(amount_surf, (self.drag_pos["x"] + self.slot_size - amount_surf.get_width(), self.drag_pos["y"] + self.slot_size - amount_surf.get_height()))
+            mx, my = pygame.mouse.get_pos()
+            self._render_dragged_item(mx, my)
 
-        # Draw tooltip last (after dragged item)
+        # Draw tooltip if hovering over an item
+        mouse_pos = pygame.mouse.get_pos()
+        self.get_slot_at_pos(mouse_pos)  # Updates self.hovered_item
         if self.hovered_item and not self.dragging_item:
             tooltip_text = get_item_tooltip(self.hovered_item)
             self.tooltip.draw(self.screen, tooltip_text, (mouse_pos[0] + 15, mouse_pos[1] + 15))
@@ -352,3 +404,117 @@ class InventoryUI:
             self.dragging_container = None
             self.dragging_index = None
             self.drag_pos = {"x": 0, "y": 0}
+
+    def _render_slot(self, slot, index):
+        """Create a surface for a single inventory slot"""
+        surface = pygame.Surface((self.slot_size, self.slot_size), pygame.SRCALPHA)
+        
+        # Draw slot background
+        pygame.draw.rect(surface, (50, 50, 50, 200), (0, 0, self.slot_size, self.slot_size))
+        pygame.draw.rect(surface, (100, 100, 100, 255), (0, 0, self.slot_size, self.slot_size), 1)
+        
+        # Draw item if present
+        if slot and slot.get("item"):
+            item = slot["item"]
+            if hasattr(item, 'texture_coords'):
+                tx, ty = item.texture_coords
+                texture_rect = pygame.Rect(tx * c.BLOCK_SIZE, ty * c.BLOCK_SIZE, c.BLOCK_SIZE, c.BLOCK_SIZE)
+                item_texture = self.atlas.subsurface(texture_rect)
+                scaled_texture = pygame.transform.scale(item_texture, (self.slot_size-8, self.slot_size-8))
+                surface.blit(scaled_texture, (4, 4))
+                
+                if slot["quantity"] > 1:
+                    quantity_text = self.font.render(str(slot["quantity"]), True, (255, 255, 255))
+                    surface.blit(quantity_text, (self.slot_size - 20, self.slot_size - 20))
+        
+        return surface
+
+    def _render_hotbar_slot(self, slot, index):
+        """Create a surface for a hotbar slot"""
+        surface = pygame.Surface((self.slot_size, self.slot_size), pygame.SRCALPHA)
+        
+        # Draw slot background
+        pygame.draw.rect(surface, (50, 50, 50, 200), (0, 0, self.slot_size, self.slot_size))
+        
+        # Highlight selected slot
+        if index == self.inventory.selected_hotbar_index:
+            pygame.draw.rect(surface, (255, 215, 0), (-2, -2, self.slot_size+4, self.slot_size+4), 2)
+        
+        pygame.draw.rect(surface, (100, 100, 100, 255), (0, 0, self.slot_size, self.slot_size), 1)
+        
+        # Draw item if present
+        if slot and slot.get("item"):
+            item = slot["item"]
+            if hasattr(item, 'texture_coords'):
+                tx, ty = item.texture_coords
+                texture_rect = pygame.Rect(tx * c.BLOCK_SIZE, ty * c.BLOCK_SIZE, c.BLOCK_SIZE, c.BLOCK_SIZE)
+                item_texture = self.atlas.subsurface(texture_rect)
+                scaled_texture = pygame.transform.scale(item_texture, (self.slot_size-8, self.slot_size-8))
+                surface.blit(scaled_texture, (4, 4))
+                
+                if slot["quantity"] > 1:
+                    quantity_text = self.font.render(str(slot["quantity"]), True, (255, 255, 255))
+                    surface.blit(quantity_text, (self.slot_size - 20, self.slot_size - 20))
+        
+        return surface
+
+    def _get_inventory_pos(self, index):
+        """Get position for inventory slot"""
+        row = index // 8
+        col = index % 8
+        x = c.SCREEN_WIDTH//2 - 4*(self.slot_size + self.padding) + col * (self.slot_size + self.padding)
+        y = 250 + row * (self.slot_size + self.padding)
+        return (x, y)
+
+    def _get_hotbar_pos(self, index):
+        """Get position for hotbar slot"""
+        x = c.SCREEN_WIDTH//2 - 4*(self.slot_size + self.padding) + index * (self.slot_size + self.padding)
+        y = c.SCREEN_HEIGHT - self.slot_size - 40
+        return (x, y)
+
+    def _render_dragged_item(self, mx, my):
+        """Render dragged item at mouse position"""
+        if not self.dragging_item or not self.dragging_item.get("item"):
+            return
+            
+        item = self.dragging_item["item"]
+        if hasattr(item, 'texture_coords'):
+            tx, ty = item.texture_coords
+            texture_rect = pygame.Rect(tx * c.BLOCK_SIZE, ty * c.BLOCK_SIZE, c.BLOCK_SIZE, c.BLOCK_SIZE)
+            item_texture = self.atlas.subsurface(texture_rect)
+            scaled_texture = pygame.transform.scale(item_texture, (self.slot_size, self.slot_size))
+            self.screen.blit(scaled_texture, (mx - self.slot_size//2, my - self.slot_size//2))
+
+    def _render_armor_slot(self, slot, index):
+        """Create a surface for an armor slot"""
+        surface = pygame.Surface((self.slot_size, self.slot_size), pygame.SRCALPHA)
+        
+        # Draw slot background with armor type indicator
+        pygame.draw.rect(surface, (60, 60, 80, 200), (0, 0, self.slot_size, self.slot_size))
+        
+        # Add armor type indicator
+        armor_types = ["Helmet", "Chestplate", "Leggings", "Boots", "Shield", "Weapon"]
+        if index < len(armor_types):
+            type_text = self.font.render(armor_types[index][:1], True, (200, 200, 200))
+            surface.blit(type_text, (2, 2))
+        
+        pygame.draw.rect(surface, (120, 120, 140, 255), (0, 0, self.slot_size, self.slot_size), 1)
+        
+        # Draw item if present
+        if slot and slot.get("item"):
+            item = slot["item"]
+            if hasattr(item, 'texture_coords'):
+                tx, ty = item.texture_coords
+                texture_rect = pygame.Rect(tx * c.BLOCK_SIZE, ty * c.BLOCK_SIZE, c.BLOCK_SIZE, c.BLOCK_SIZE)
+                item_texture = self.atlas.subsurface(texture_rect)
+                scaled_texture = pygame.transform.scale(item_texture, (self.slot_size-8, self.slot_size-8))
+                surface.blit(scaled_texture, (4, 4))
+        
+        return surface
+
+    def _get_armor_pos(self, index):
+        """Get position for armor slot"""
+        x = c.SCREEN_WIDTH//2 - 1.5*(self.slot_size + self.padding)
+        y = 100 + (index // 3) * (self.slot_size + self.padding)
+        x += (index % 3) * (self.slot_size + self.padding)
+        return (x, y)

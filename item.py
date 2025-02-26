@@ -34,6 +34,8 @@ class Item:
         self.tint = None  # Added this for the get_texture method
         self.type = None  # Add this line to store item type
         self.script = None  # Add script property
+        self.is_seed = False  # Initialize is_seed property
+        self.plant_data = None  # Initialize plant_data property
 
         # Add stat modifiers
         self.modifiers = {

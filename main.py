@@ -21,6 +21,13 @@ from storage_ui import StorageUI  # new import
 from furnace_ui import FurnaceUI  # new import
 from enhancer_ui import EnhancerUI  # Add this import
 from ui.progress_bar import ProgressBar  # Add this import
+from collections import deque
+from typing import Dict, Set
+import time
+import psutil
+import cProfile
+from async_chunk_manager import AsyncChunkManager
+from texture_manager import TextureManager
 
 class World:
     def __init__(self):
@@ -54,6 +61,104 @@ def create_light_mask(radius):
 
 # Precompute the light mask once (radius = 100)
 global_light_mask = create_light_mask(100)
+
+class ChunkManager:
+    def __init__(self, chunk_width, view_distance):
+        self.chunk_width = chunk_width
+        self.view_distance = view_distance
+        self.loaded_chunks = {}
+        self.visible_chunks = set()
+        self.chunk_load_queue = deque()
+        self.chunk_unload_queue = deque()
+        self.cached_surfaces = {}
+        self.last_render_time = {}
+        self.stats = {
+            'chunks_rendered': 0,
+            'blocks_rendered': 0,
+            'render_time': 0,
+            'memory_usage': 0
+        }
+        # Add async chunk manager
+        self.async_manager = AsyncChunkManager(chunk_width, view_distance)
+        self.texture_manager = TextureManager()
+        self.texture_manager.load_atlas("texture_atlas.png")
+
+    def update_visible_chunks(self, camera_x, screen_width):
+        """Calculate which chunks should be visible"""
+        left_chunk = (camera_x - screen_width//2) // (self.chunk_width * c.BLOCK_SIZE)
+        right_chunk = (camera_x + screen_width//2) // (self.chunk_width * c.BLOCK_SIZE) + 1
+        
+        new_visible = set(range(left_chunk - 1, right_chunk + 1))
+        
+        # Queue chunks to load/unload
+        for chunk_idx in new_visible - self.visible_chunks:
+            self.chunk_load_queue.append(chunk_idx)
+        for chunk_idx in self.visible_chunks - new_visible:
+            self.chunk_unload_queue.append(chunk_idx)
+        
+        self.visible_chunks = new_visible
+
+    def render_chunk(self, chunk_index, chunk, texture_atlas):
+        """Optimized chunk rendering with texture manager"""
+        if chunk_index in self.cached_surfaces:
+            last_update = self.last_render_time.get(chunk_index, 0)
+            if time.time() - last_update < 1.0:
+                return self.cached_surfaces[chunk_index]
+
+        surface = pygame.Surface((self.chunk_width * c.BLOCK_SIZE, c.WORLD_HEIGHT * c.BLOCK_SIZE), pygame.SRCALPHA)
+        
+        # Group blocks by texture coordinates and tint
+        render_batches = {}
+        for y, row in enumerate(chunk):
+            for x, block in enumerate(row):
+                if block != b.AIR:
+                    # Convert texture coordinates to tuple if they're a list
+                    coords = tuple(block.texture_coords) if isinstance(block.texture_coords, list) else block.texture_coords
+                    key = (coords, block.tint if hasattr(block, 'tint') else None)
+                    if key not in render_batches:
+                        render_batches[key] = []
+                    render_batches[key].append((x, y))
+
+        # Render batches
+        for (coords, tint), positions in render_batches.items():
+            texture = self.texture_manager.get_texture(coords, tint)
+            for x, y in positions:
+                surface.blit(texture, (x * c.BLOCK_SIZE, y * c.BLOCK_SIZE))
+
+        self.cached_surfaces[chunk_index] = surface
+        self.last_render_time[chunk_index] = time.time()
+        return surface
+
+    def process_queues(self, world_chunks, seed):
+        """Process chunk loading/unloading queues"""
+        # Request chunks asynchronously
+        current_chunk = max(world_chunks.keys()) if world_chunks else 0
+        self.async_manager.request_chunks(current_chunk, seed)
+        
+        # Get any completed chunks
+        new_chunks = self.async_manager.get_ready_chunks()
+        world_chunks.update(new_chunks)
+        
+        # Process unload queue
+        while self.chunk_unload_queue and len(world_chunks) > self.view_distance * 2:
+            chunk_idx = self.chunk_unload_queue.popleft()
+            if chunk_idx in world_chunks:
+                del world_chunks[chunk_idx]
+            if chunk_idx in self.cached_surfaces:
+                del self.cached_surfaces[chunk_idx]
+            if chunk_idx in self.last_render_time:
+                del self.last_render_time[chunk_idx]
+
+    def update_stats(self):
+        """Update performance statistics"""
+        self.stats['memory_usage'] = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+        self.stats['chunks_rendered'] = len(self.visible_chunks)
+
+    def invalidate_chunk(self, chunk_index):
+        """Mark a chunk for re-rendering"""
+        if chunk_index in self.cached_surfaces:
+            del self.cached_surfaces[chunk_index]
+            del self.last_render_time[chunk_index]
 
 def main():
     pygame.init()
@@ -158,7 +263,16 @@ def main():
     hunger_bar = ProgressBar(10, c.SCREEN_HEIGHT - 60, 200, 20, color=(139, 69, 19))
     thirst_bar = ProgressBar(10, c.SCREEN_HEIGHT - 30, 200, 20, color=(0, 191, 255))
 
+    # Add chunk manager
+    chunk_manager = ChunkManager(chunk_width, view_distance)
+    
+    # Add performance monitoring variables
+    frame_times = deque(maxlen=60)
+    profiler = cProfile.Profile()
+    show_debug = False
+
     while True:
+        start_time = time.time()
         dt = clock.tick(60)  # milliseconds since last frame
         # Reset placement flags when mouse buttons are released:
         mouse_buttons = pygame.mouse.get_pressed()
@@ -216,10 +330,49 @@ def main():
             # Modified MOUSEBUTTONDOWN handling for movement mode attacks:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if not action_mode:
-                    if event.button in (1, 3):
+                    if event.button in (1, 3):  # Left or right click
                         selected = player_inventory.get_selected_item()
-                        if selected:
-                            item_obj = selected.get("item")
+                        if selected and selected.get("item"):
+                            item_obj = selected["item"]
+                            
+                            # Handle farming/seeds first for both mouse buttons
+                            if event.button == 3:  # Right click only for planting
+                                mouse_x, mouse_y = event.pos
+                                world_x = int((mouse_x + cam_offset_x) // block_size)
+                                world_y = int((mouse_y + cam_offset_y) // block_size)
+                                chunk_index = world_x // chunk_width
+                                local_x = world_x % chunk_width
+                                
+                                if chunk_index in world_chunks and 0 <= world_y < world_height:
+                                    block = world_chunks[chunk_index][world_y][local_x]
+                                    if isinstance(block, b.FarmingBlock):
+                                        # Check for hoe type
+                                        if item_obj.type == "hoe" and not block.tilled:
+                                            block.till()
+                                            print(f"Tilled soil at ({world_x}, {world_y})")
+                                            continue
+                                        # Handle seed planting
+                                        elif hasattr(item_obj, 'is_seed') and item_obj.is_seed:
+                                            if block.tilled and hasattr(block, 'plant_seed'):
+                                                if block.plant_seed(item_obj):
+                                                    player_inventory.update_quantity(selected, -1)
+                                                    print(f"Planted {item_obj.name}")
+                                                    continue
+
+                            # Skip attack action for seeds
+                            if hasattr(item_obj, 'is_seed') and item_obj.is_seed:
+                                continue
+
+                            # Handle consumables
+                            if item_obj is not None and event.button == 3 and item_obj.consumable_type is not None:
+                                consumed = item_obj.consume(player)
+                                if consumed:
+                                    player_inventory.update_quantity(selected, -1)
+                                    print(f"Consumed {item_obj.name}")
+                                continue
+                            # NEW: Check if it's a seed item before allowing attack action
+                            if item_obj is not None and hasattr(item_obj, 'is_seed') and item_obj.is_seed:
+                                continue  # Skip attack action for seed items
                             # NEW: Safeguard check to prevent NoneType access during consumable check.
                             if item_obj is not None and event.button == 3 and item_obj.consumable_type is not None:
                                 consumed = item_obj.consume(player)
@@ -299,21 +452,25 @@ def main():
                         selected = player_inventory.get_selected_item()
                         
                         # Check if block is FarmingBlock and player has hoe selected
-                        if isinstance(block, b.FarmingBlock) and selected and selected.get("item"):
-                            item = selected["item"]
-                            print(f"DEBUG: Selected item type: {item.type}")  # Add debug output
-                            
-                            # Check specifically for hoe type
-                            if item.type == "hoe" and not block.tilled:
-                                block.till()
-                                print(f"Tilled soil at ({world_x}, {world_y})")
-                                continue
-                            # Handle seed planting separately
-                            elif hasattr(item, 'is_seed') and item.is_seed and block.tilled:
-                                if block.plant_seed(item):
-                                    player_inventory.update_quantity(selected, -1)
-                                    print(f"Planted {item.name}")
+                        if isinstance(block, b.FarmingBlock):
+                            if selected and selected.get("item"):
+                                item = selected["item"]
+                                print(f"DEBUG: Selected item type: {item.type}")
+                                
+                                # Check specifically for hoe type
+                                if item.type == "hoe" and not block.tilled:
+                                    block.till()
+                                    print(f"Tilled soil at ({world_x}, {world_y})")
                                     continue
+                                # Handle seed planting
+                                elif hasattr(item, 'is_seed') and item.is_seed and block.tilled:
+                                    if hasattr(block, 'plant_seed'):
+                                        if block.plant_seed(item):
+                                            player_inventory.update_quantity(selected, -1)
+                                            print(f"Planted {item.name}")
+                                            continue
+                                    else:
+                                        print("Error: FarmingBlock missing plant_seed method")
 
                         # Handle other block interactions...
                         if isinstance(block, b.StorageBlock):
@@ -530,6 +687,7 @@ def main():
                         if block.item_variant and block != b.AIR:  # Double check against AIR
                             player_inventory.add_item(block.item_variant, 1)
                         print(f"Breaking block: {block.name}, drop_item: {block.drop_item}")
+                    chunk_manager.invalidate_chunk(chunk_index)
                 # Right click: process placement in action mode
                 if mouse_buttons[2] and not placed_water:  # Right click
                     selected = player_inventory.get_selected_item()
@@ -556,6 +714,7 @@ def main():
                                 player_inventory.update_quantity(selected, -1)
                             else:
                                 print(f"Cannot place block: {block_to_place.name} at ({world_x}, {world_y}) - Blocked or colliding")
+                            chunk_manager.invalidate_chunk(chunk_index)
                         else:
                             print(f"Cannot place non-block item: {item_obj.name}")
         # Apply gravity and update vertical position
@@ -708,18 +867,28 @@ def main():
         for world_item in world_items:
             world_item.update(dt, world_info)
 
-        # Render each loaded chunk using the texture atlas.
-        for ci, chunk in world_chunks.items():
-            chunk_x_offset = ci * chunk_width * block_size - cam_offset_x
-            # Horizontal bounds
-            if chunk_x_offset < -c.SCREEN_WIDTH * 2 or chunk_x_offset > c.SCREEN_WIDTH * 2:
-                continue
-            for y, row in enumerate(chunk):
-                for x, block_obj in enumerate(row):
-                    if block_obj != b.AIR:
-                        texture = block_obj.get_texture(texture_atlas)
-                        screen.blit(texture, (chunk_x_offset + x * block_size, y * block_size - cam_offset_y))
+        # Update visible chunks based on camera position
+        chunk_manager.update_visible_chunks(player.rect.x, c.SCREEN_WIDTH)
         
+        # Process chunk loading/unloading
+        chunk_manager.process_queues(world_chunks, seed)
+
+        # Clear screen and draw background
+        screen.fill((135, 206, 235))
+        parallax.draw(screen, cam_offset_x, dt)
+
+        # Batch render visible chunks
+        render_start = time.time()
+        chunks_rendered = 0
+        for chunk_index in chunk_manager.visible_chunks:
+            if chunk_index in world_chunks:
+                chunk_surface = chunk_manager.render_chunk(chunk_index, world_chunks[chunk_index], texture_atlas)
+                screen.blit(chunk_surface, 
+                          (chunk_index * chunk_width * block_size - cam_offset_x,
+                           -cam_offset_y))
+                chunks_rendered += 1
+        chunk_manager.stats['render_time'] = time.time() - render_start
+
         # Render world items
         for world_item in world_items:
             world_item.draw(screen, texture_atlas)
@@ -848,10 +1017,76 @@ def main():
                     if isinstance(block_obj, b.FarmingBlock):
                         block_obj.update(dt)
 
+        # Draw performance stats if debug mode is on
+        if show_debug:
+            stats_surface = pygame.Surface((200, 100), pygame.SRCALPHA)
+            stats_surface.fill((0, 0, 0, 128))
+            y = 5
+            for stat, value in chunk_manager.stats.items():
+                text = f"{stat}: {value:.2f}"
+                text_surf = font.render(text, True, (255, 255, 255))
+                stats_surface.blit(text_surf, (5, y))
+                y += 20
+            screen.blit(stats_surface, (5, 5))
+
         pygame.display.flip()
         
+        # Update frame time tracking
+        frame_time = time.time() - start_time
+        frame_times.append(frame_time)
+        current_fps = 1.0 / (sum(frame_times) / len(frame_times))
+        
+        # Update window title with FPS
+        pygame.display.set_caption(f"Reriara Clone - FPS: {int(current_fps)}")
+
     return "quit"
         
 if __name__ == "__main__":
     main()
+
+def handle_block_break(chunk_index, local_x, world_y, block, player_inventory):
+    """Handle block breaking logic"""
+    selected = player_inventory.get_selected_item()
+    if selected and hasattr(selected["item"], "effective_against") and selected["item"].effective_against:
+        tool = selected["item"]
+        if block.name in tool.effective_against:
+            world_chunks[chunk_index][world_y][local_x] = b.AIR
+            if block.item_variant and block != b.AIR:
+                player_inventory.add_item(block.item_variant, 1)
+            return True
+    else:
+        world_chunks[chunk_index][world_y][local_x] = b.AIR
+        if block.item_variant and block != b.AIR:
+            player_inventory.add_item(block.item_variant, 1)
+        return True
+    return False
+
+def handle_block_place(chunk_index, local_x, world_y, player_inventory, player, block_size):
+    """Handle block placing logic"""
+    selected = player_inventory.get_selected_item()
+    if not (selected and selected.get("item")):
+        return False
+        
+    item_obj = selected["item"]
+    if not (item_obj.is_block and hasattr(item_obj, "block")):
+        return False
+        
+    block_to_place = item_obj.block
+    if isinstance(block_to_place, (b.StorageBlock, b.FurnaceBlock, b.EnhancerBlock)):
+        block_to_place = block_to_place.create_instance()
+        
+    block_world_rect = pygame.Rect(
+        chunk_index * chunk_width * block_size + local_x * block_size,
+        world_y * block_size,
+        block_size,
+        block_size
+    )
+    
+    if (world_chunks[chunk_index][world_y][local_x] == b.AIR and 
+        not player.rect.colliderect(block_world_rect)):
+        world_chunks[chunk_index][world_y][local_x] = block_to_place
+        player_inventory.update_quantity(selected, -1)
+        return True
+        
+    return False
 

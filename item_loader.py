@@ -149,6 +149,14 @@ class ItemScript:
             # Set category/type
             item.type = data.get('category', 'material')
             
+            # Set is_seed flag for seed category items
+            if item.type == 'seed':
+                item.is_seed = True
+            
+            # Set plant_data if present
+            if 'plant_data' in data:
+                item.plant_data = data['plant_data']
+            
             # Set modifiers if present
             if 'modifiers' in data:
                 item.modifiers = data['modifiers']

@@ -20,39 +20,14 @@ class Block:
         self.tint = tint  # Tint color to modify block appearance
         self.item_variant = None  # New: will hold the corresponding item
         self.entity_type = entity_type  # New: entity type to spawn
+        self._texture_key = None  # Add cache key for textures
 
     # NEW: Helper method to get the block texture with tint applied if set.
-    def get_texture(self, atlas):
-        # Always use tuple for cache key
-        cache_key = (self.id, self.texture_coords)  # texture_coords is already a tuple
-
-        # Clear texture cache if coordinates changed
-        if hasattr(self, '_last_coords') and self._last_coords != self.texture_coords:
-            if hasattr(self, '_cached_base'):
-                del self._cached_base
-            if hasattr(self, '_cached_texture'):
-                del self._cached_texture
-        self._last_coords = self.texture_coords
-
-        # Special case for AIR - return None to indicate no texture
-        if self.id == 0:
-            return None
-
-        # Generate texture
-        if not hasattr(self, '_cached_base'):
-            block_size = c.BLOCK_SIZE
-            tx, ty = self.texture_coords
-            texture_rect = pygame.Rect(tx * block_size, ty * block_size, block_size, block_size)
-            self._cached_base = atlas.subsurface(texture_rect).convert_alpha()
-            #print(f"[TEXTURE] Created new texture for {self.name} at {self.texture_coords}")
-
-        if not self.tint:
-            return self._cached_base
-        if not hasattr(self, "_cached_texture"):
-            tinted = self._cached_base.copy()
-            tinted.fill(self.tint, special_flags=pygame.BLEND_RGBA_MULT)
-            self._cached_texture = tinted
-        return self._cached_texture
+    def get_texture(self, texture_manager):
+        """Get block texture using texture manager"""
+        if not self._texture_key:
+            self._texture_key = (self.texture_coords, self.tint if hasattr(self, 'tint') else None)
+        return texture_manager.get_texture(*self._texture_key)
 
     def create_instance(self):
         """Create a new instance of the block"""

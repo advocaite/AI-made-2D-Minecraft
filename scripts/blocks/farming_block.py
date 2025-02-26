@@ -226,5 +226,7 @@ class Plant:
     def get_texture_coords(self):
         """Cached texture coordinate lookup"""
         if self._cached_texture_coords is None or self._cached_texture_coords[0] != self.current_stage:
-            self._cached_texture_coords = (self.current_stage, self.texture_coords[self.current_stage])
+            # Convert texture coordinates to tuple
+            coords = tuple(self.texture_coords[self.current_stage])
+            self._cached_texture_coords = (self.current_stage, coords)
         return self._cached_texture_coords[1]

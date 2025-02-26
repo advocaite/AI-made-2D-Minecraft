@@ -2,3 +2,4 @@ pygame
 noise
 jsonschema
 pillow
+psutil

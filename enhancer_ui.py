@@ -59,16 +59,6 @@ class EnhancerUI:
         self.debug_log = []  # Add debug log list
         self.enhancer_block = ENHANCER.create_instance()  # Add this line to create an instance!
 
-        # Add glow effect properties
-        self.glow_active = False
-        self.glow_timer = 0
-        self.glow_duration = 1500  # 1.5 seconds
-        self.glow_colors = [
-            (255, 215, 0, 255),  # Gold
-            (255, 255, 200, 255),  # Light yellow
-            (255, 215, 0, 255)   # Gold again
-        ]
-
     def log_debug(self, message):
         """Add timestamped debug message"""
         import time
@@ -92,10 +82,6 @@ class EnhancerUI:
         """Apply enhancement if possible"""
         recipe = self.can_enhance()
         if recipe:
-            # Trigger glow effect
-            self.glow_active = True
-            self.glow_timer = 0
-            
             # Create enhanced copy of item
             enhanced_item = dict(self.item_in_slot)
             enhanced_item["item"].apply_enhancement(
@@ -118,52 +104,6 @@ class EnhancerUI:
             return True
         return False
 
-    def draw_glow_effect(self):
-        """Draw gradient glow effect over the input slot"""
-        if not self.glow_active:
-            return
-            
-        # Calculate glow progress
-        progress = self.glow_timer / self.glow_duration
-        if progress >= 1:
-            self.glow_active = False
-            return
-            
-        # Create surface for glow
-        glow_surf = pygame.Surface((self.slot_size, self.slot_size), pygame.SRCALPHA)
-        
-        # Calculate gradient position
-        gradient_height = self.slot_size
-        gradient_y = int((1 - progress) * gradient_height)
-        
-        # Draw gradient
-        for i in range(gradient_height):
-            rel_pos = i / gradient_height
-            if i < gradient_y:
-                continue
-                
-            # Calculate color based on position
-            color_idx = rel_pos * (len(self.glow_colors) - 1)
-            base_idx = int(color_idx)
-            next_idx = min(base_idx + 1, len(self.glow_colors) - 1)
-            blend = color_idx - base_idx
-            
-            # Interpolate between colors
-            c1 = self.glow_colors[base_idx]
-            c2 = self.glow_colors[next_idx]
-            color = [
-                int(c1[j] * (1 - blend) + c2[j] * blend) for j in range(4)
-            ]
-            
-            # Fade alpha based on progress
-            color[3] = int(color[3] * (1 - progress))
-            
-            # Draw line of gradient
-            pygame.draw.line(glow_surf, color, (0, i), (self.slot_size, i))
-            
-        # Draw glow surface
-        self.screen.blit(glow_surf, self.item_slot.topleft)
-
     def draw(self):
         """Draw the enhancer UI"""
         # Background
@@ -177,12 +117,7 @@ class EnhancerUI:
         pygame.draw.rect(self.screen, (200, 200, 200), self.item_slot, 2)
         pygame.draw.rect(self.screen, (200, 200, 200), self.ingredient_slot, 2)
 
-        # Draw glow effect after slots but before items
-        if self.glow_active:
-            self.draw_glow_effect()
-            self.glow_timer += pygame.time.get_ticks() / 1000.0  # Update timer
-        
-        # Draw items in slots after glow
+        # Draw items in slots
         if self.item_in_slot:
             self.draw_item(self.item_in_slot, self.item_slot)
         if self.ingredient_in_slot:

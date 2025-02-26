@@ -244,3 +244,46 @@ class Inventory:
                 if i < 9 and block.item_variant:
                     self.hotbar[i] = {"item": block.item_variant, "quantity": 64}
                     print(f"Refilled hotbar slot {i} with {block.name}")
+
+    def has_items(self, required_items):
+        """
+        Check if inventory has required items
+        required_items: List of tuples (item_id, quantity)
+        """
+        # First count all available items
+        item_counts = {}
+        
+        # Count items in main inventory
+        for slot in self.main:
+            if slot and slot.get("item"):
+                item_id = slot["item"].id
+                item_counts[item_id] = item_counts.get(item_id, 0) + slot["quantity"]
+                
+        # Count items in hotbar
+        for slot in self.hotbar:
+            if slot and slot.get("item"):
+                item_id = slot["item"].id
+                item_counts[item_id] = item_counts.get(item_id, 0) + slot["quantity"]
+                
+        # Check if we have enough of each required item
+        for item_id, quantity in required_items:
+            if item_counts.get(item_id, 0) < quantity:
+                return False
+                
+        return True
+
+    def count_item(self, item_id):
+        """Count total quantity of an item across all slots"""
+        total = 0
+        
+        # Count in main inventory
+        for slot in self.main:
+            if slot and slot.get("item") and slot["item"].id == item_id:
+                total += slot["quantity"]
+                
+        # Count in hotbar
+        for slot in self.hotbar:
+            if slot and slot.get("item") and slot["item"].id == item_id:
+                total += slot["quantity"]
+                
+        return total
